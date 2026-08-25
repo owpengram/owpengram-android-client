@@ -26,8 +26,15 @@ public class UserConfig extends BaseController {
     public static int selectedAccount;
     // Telegram-official free account cap (premium raises it; see OwpengramServers).
     public final static int MAX_ACCOUNT_DEFAULT_COUNT = 3;
-    // Total account slots across all servers (mirrors desktop kMaxTotalAccounts = 10).
-    public final static int MAX_ACCOUNT_COUNT = 10;
+    // Total account slots across all servers -- not a business rule like
+    // MAX_ACCOUNT_DEFAULT_COUNT, just a defensive upper bound. This sizes a
+    // fixed-size array (and its full-range iteration loop) in dozens of
+    // per-account singletons (NotificationCenter, ConnectionsManager,
+    // MessagesController, FileLoader, ...), unlike desktop's dynamic
+    // std::vector-backed account list (kMaxTotalAccounts there is 1000) --
+    // kept far more conservative here to avoid growing every one of those
+    // arrays/loops 100x on a battery/memory-constrained device.
+    public final static int MAX_ACCOUNT_COUNT = 50;
 
     private final Object sync = new Object();
     private volatile boolean configLoaded;
