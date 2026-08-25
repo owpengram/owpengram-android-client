@@ -192,6 +192,20 @@ public class OwpengramServers {
     }
 
     /**
+     * Clears the account-slot -> server-id mapping. Must be called on logout:
+     * account slots are freed and reused by whatever account logs in next
+     * (see UserConfig / ProfileActivity's "Add another account" free-slot
+     * scan), but this mapping is keyed by slot number, not by user identity.
+     * Without clearing it here, a newly-activated account inheriting a
+     * previously-used slot would silently inherit the PREVIOUS occupant's
+     * server assignment (wrong category in the account list, wrong DC/RSA
+     * key applied) until the user happens to pick a server again.
+     */
+    public static void clearServerForAccount(int accountNum) {
+        getPrefs().edit().remove(KEY_ACCOUNT_SERVER + accountNum).apply();
+    }
+
+    /**
      * Stable key for grouping per-server local device state (currently: recent/frequently-used
      * emoji, see Emoji.java) by backend rather than by device. Two different custom servers do
      * NOT share a document-id namespace — a custom-emoji document id cached while using one

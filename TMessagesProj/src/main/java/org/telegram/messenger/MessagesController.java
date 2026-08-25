@@ -16129,6 +16129,7 @@ public class MessagesController extends BaseController implements NotificationCe
         }
         getUserConfig().clearConfig();
         SharedPrefsHelper.cleanupAccount(currentAccount);
+        org.telegram.owpengram.OwpengramServers.clearServerForAccount(currentAccount);
 
         boolean shouldHandle = true;
         ArrayList<NotificationCenter.NotificationCenterDelegate> observers = getNotificationCenter().getObservers(NotificationCenter.appDidLogout);
