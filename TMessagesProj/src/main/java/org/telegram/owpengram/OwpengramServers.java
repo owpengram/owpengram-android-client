@@ -471,15 +471,25 @@ public class OwpengramServers {
         return countTelegramAccounts() < telegramAccountLimit();
     }
 
+    public static class ServerInfoFetchResult {
+        public final String rsaPublicKeyPem;
+        public final int dcId;
+
+        public ServerInfoFetchResult(String rsaPublicKeyPem, int dcId) {
+            this.rsaPublicKeyPem = rsaPublicKeyPem;
+            this.dcId = dcId;
+        }
+    }
+
     /**
-     * Fetches a server's RSA public key from its well-known same-port HTTP
-     * endpoint (GET host:port/owpengram/server-info), so "Add Server" can be
-     * filled in from just host:port instead of a manual PEM copy-paste.
-     * callback receives the PEM string on success, or null on any failure
-     * (offline, unsupported server, malformed response) -- always on the UI
-     * thread (AsyncTask#onPostExecute).
+     * Fetches a server's RSA public key and home DC id from its well-known
+     * same-port HTTP endpoint (GET host:port/owpengram/server-info), so "Add
+     * Server" can be filled in from just host:port instead of manual PEM
+     * copy-paste + guessing the DC id. callback receives the result on
+     * success, or null on any failure (offline, unsupported server,
+     * malformed response) -- always on the UI thread (AsyncTask#onPostExecute).
      */
-    public static void fetchServerPublicKey(String host, int port, org.telegram.messenger.Utilities.Callback<String> callback) {
+    public static void fetchServerInfo(String host, int port, org.telegram.messenger.Utilities.Callback<ServerInfoFetchResult> callback) {
         if (TextUtils.isEmpty(host) || port <= 0) {
             callback.run(null);
             return;
@@ -491,8 +501,10 @@ public class OwpengramServers {
                 return;
             }
             try {
-                String pem = new JSONObject(body).optString("rsa_public_key_pem", "");
-                callback.run(pem.isEmpty() ? null : pem);
+                JSONObject obj = new JSONObject(body);
+                String pem = obj.optString("rsa_public_key_pem", "");
+                int dcId = obj.optInt("dc_id", 0);
+                callback.run(pem.isEmpty() ? null : new ServerInfoFetchResult(pem, dcId));
             } catch (Exception e) {
                 callback.run(null);
             }

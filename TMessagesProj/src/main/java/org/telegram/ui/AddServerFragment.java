@@ -4,12 +4,16 @@ import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.PorterDuff;
+import android.text.Editable;
 import android.text.InputType;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -34,6 +38,7 @@ public class AddServerFragment extends BaseFragment {
 
     private EditTextBoldCursor nameField;
     private EditTextBoldCursor addressField;
+    private ProgressBar addressSpinner;
     private EditTextBoldCursor descField;
     private EditTextBoldCursor rsaField;
     private EditTextBoldCursor mainDcField;
@@ -41,10 +46,14 @@ public class AddServerFragment extends BaseFragment {
     private View multiDcToggle;
     private boolean multiDcEnabled = false;
 
-    // Guards the auto-fetched key against clobbering text the user typed by
-    // hand -- only overwrite while the field still holds what we fetched.
-    private String autoFetchedRsaPublicKey = "";
+    private TextView advancedHeader;
+    private View advancedSection;
+    private boolean advancedExpanded = false;
+
+    // Suppresses re-fetching for an address we already have a result for.
     private String lastFetchedAddress = "";
+    private final Runnable fetchDebounceRunnable = this::fetchPublicKeyForAddress;
+    private static final int FETCH_DEBOUNCE_MS = 500;
 
     private static final int DEFAULT_SINGLE_MAIN_DC = 2;
 
@@ -90,14 +99,41 @@ public class AddServerFragment extends BaseFragment {
         content.addView(buildSectionHeader(context, "Connection"));
         LinearLayout section2 = buildCard(context);
         addressField = buildField(context, "Address (host:port)", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI, EditorInfo.IME_ACTION_NEXT);
+        addressSpinner = new ProgressBar(context, null, android.R.attr.progressBarStyleSmall);
+        addressSpinner.getIndeterminateDrawable().setColorFilter(
+                Theme.getColor(Theme.key_windowBackgroundWhiteGrayText), PorterDuff.Mode.SRC_IN);
+        addressSpinner.setVisibility(View.GONE);
+
+        LinearLayout addressRow = new LinearLayout(context);
+        addressRow.setOrientation(LinearLayout.HORIZONTAL);
+        addressRow.setGravity(Gravity.CENTER_VERTICAL);
+        addressRow.setPadding(dp(16), dp(4), dp(16), dp(4));
+        addressRow.addView(addressField, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f));
+        addressRow.addView(addressSpinner, LayoutHelper.createLinear(dp(20), dp(20), Gravity.CENTER_VERTICAL, dp(8), 0, 0, 0));
+        section2.addView(addressRow);
+
         addressField.setOnFocusChangeListener((v, hasFocus) -> {
-            if (!hasFocus) fetchPublicKeyForAddress();
+            if (!hasFocus) {
+                addressField.removeCallbacks(fetchDebounceRunnable);
+                fetchPublicKeyForAddress();
+            }
         });
-        addFieldToCard(section2, addressField, true);
+        addressField.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(Editable s) {
+                addressField.removeCallbacks(fetchDebounceRunnable);
+                addressField.postDelayed(fetchDebounceRunnable, FETCH_DEBOUNCE_MS);
+            }
+        });
         content.addView(section2);
 
-        // Section: advanced
-        content.addView(buildSectionHeader(context, "Advanced"));
+        // Section: advanced (collapsed by default -- only matters for servers
+        // that don't serve their key/DC over /owpengram/server-info, or to
+        // override what auto-fetch filled in).
+        advancedHeader = buildSectionHeader(context, "Advanced");
+        advancedHeader.setOnClickListener(v -> toggleAdvanced());
+        content.addView(advancedHeader);
         LinearLayout section3 = buildCard(context);
         multiDcToggle = buildToggleRow(context, "Multi-DC mode",
                 "Only for Telegram-compatible servers", false);
@@ -119,6 +155,8 @@ public class AddServerFragment extends BaseFragment {
         rsaField.setMinLines(3);
         rsaField.setGravity(Gravity.TOP);
         addFieldToCard(section3, rsaField, true);
+        section3.setVisibility(View.GONE);
+        advancedSection = section3;
         content.addView(section3);
         updateMainDcVisibility();
 
@@ -138,6 +176,10 @@ public class AddServerFragment extends BaseFragment {
             multiDcEnabled = editingServer.multiDc;
             updateToggleState();
             updateMainDcVisibility();
+            // Show what's already configured instead of hiding it behind a
+            // tap -- Advanced only collapses by default for the new-server,
+            // auto-fetch-does-everything case.
+            toggleAdvanced();
         }
 
         fragmentView = new FrameLayout(context);
@@ -157,6 +199,12 @@ public class AddServerFragment extends BaseFragment {
         return new String[]{address.substring(0, colon).trim(), address.substring(colon + 1).trim()};
     }
 
+    private void toggleAdvanced() {
+        advancedExpanded = !advancedExpanded;
+        advancedSection.setVisibility(advancedExpanded ? View.VISIBLE : View.GONE);
+        advancedHeader.setText(advancedExpanded ? "HIDE ADVANCED" : "ADVANCED");
+    }
+
     private void fetchPublicKeyForAddress() {
         String address = addressField.getText().toString().trim();
         if (address.isEmpty() || address.equals(lastFetchedAddress)) {
@@ -173,23 +221,21 @@ public class AddServerFragment extends BaseFragment {
         if (host.isEmpty() || port <= 0) {
             return;
         }
-        // Only auto-fill while the key field is empty or still holds our own
-        // previous auto-fetched value -- never clobber a manually pasted key.
-        String current = rsaField.getText().toString().trim();
-        if (!current.isEmpty() && !current.equals(autoFetchedRsaPublicKey)) {
-            return;
-        }
         lastFetchedAddress = address;
-        OwpengramServers.fetchServerPublicKey(host, port, pem -> {
-            if (pem == null || !lastFetchedAddress.equals(address)) {
+        addressSpinner.setVisibility(View.VISIBLE);
+        OwpengramServers.fetchServerInfo(host, port, result -> {
+            addressSpinner.setVisibility(View.GONE);
+            if (result == null || !lastFetchedAddress.equals(address)) {
                 return;
             }
-            String now = rsaField.getText().toString().trim();
-            if (!now.isEmpty() && !now.equals(autoFetchedRsaPublicKey)) {
-                return;
+            // Always overwrite -- the server is the source of truth once it
+            // answers, even if the user had typed/pasted something already.
+            if (result.rsaPublicKeyPem != null && !result.rsaPublicKeyPem.isEmpty()) {
+                rsaField.setText(result.rsaPublicKeyPem);
             }
-            autoFetchedRsaPublicKey = pem;
-            rsaField.setText(pem);
+            if (result.dcId > 0) {
+                mainDcField.setText(String.valueOf(result.dcId));
+            }
         });
     }
 
