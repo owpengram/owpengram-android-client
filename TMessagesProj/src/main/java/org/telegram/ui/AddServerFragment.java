@@ -33,8 +33,7 @@ public class AddServerFragment extends BaseFragment {
     private final OnSavedListener onSavedListener;
 
     private EditTextBoldCursor nameField;
-    private EditTextBoldCursor hostField;
-    private EditTextBoldCursor portField;
+    private EditTextBoldCursor addressField;
     private EditTextBoldCursor descField;
     private EditTextBoldCursor rsaField;
     private EditTextBoldCursor mainDcField;
@@ -42,7 +41,11 @@ public class AddServerFragment extends BaseFragment {
     private View multiDcToggle;
     private boolean multiDcEnabled = false;
 
-    private static final int DEFAULT_PORT = 2398;
+    // Guards the auto-fetched key against clobbering text the user typed by
+    // hand -- only overwrite while the field still holds what we fetched.
+    private String autoFetchedRsaPublicKey = "";
+    private String lastFetchedAddress = "";
+
     private static final int DEFAULT_SINGLE_MAIN_DC = 2;
 
     public AddServerFragment(OwpengramServer existing, OnSavedListener listener) {
@@ -86,11 +89,11 @@ public class AddServerFragment extends BaseFragment {
         // Section: connection
         content.addView(buildSectionHeader(context, "Connection"));
         LinearLayout section2 = buildCard(context);
-        hostField = buildField(context, "Host / IP address", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI, EditorInfo.IME_ACTION_NEXT);
-        addFieldToCard(section2, hostField, true);
-        portField = buildField(context, "Port", InputType.TYPE_CLASS_NUMBER, EditorInfo.IME_ACTION_NEXT);
-        portField.setText(String.valueOf(DEFAULT_PORT));
-        addFieldToCard(section2, portField, false);
+        addressField = buildField(context, "Address (host:port)", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI, EditorInfo.IME_ACTION_NEXT);
+        addressField.setOnFocusChangeListener((v, hasFocus) -> {
+            if (!hasFocus) fetchPublicKeyForAddress();
+        });
+        addFieldToCard(section2, addressField, true);
         content.addView(section2);
 
         // Section: advanced
@@ -126,8 +129,9 @@ public class AddServerFragment extends BaseFragment {
         if (isEdit) {
             nameField.setText(editingServer.name);
             descField.setText(editingServer.description);
-            hostField.setText(editingServer.host);
-            portField.setText(String.valueOf(editingServer.port));
+            addressField.setText(editingServer.port > 0
+                    ? editingServer.host + ":" + editingServer.port
+                    : editingServer.host);
             rsaField.setText(editingServer.rsaPublicKey);
             mainDcField.setText(String.valueOf(editingServer.mainDcId > 0
                     ? editingServer.mainDcId : DEFAULT_SINGLE_MAIN_DC));
@@ -142,27 +146,75 @@ public class AddServerFragment extends BaseFragment {
         return fragmentView;
     }
 
+    // --- Address parsing + auto-fetch ---
+
+    /** Splits "host:port" on the last colon. port is 0 when absent/invalid. */
+    private static String[] parseAddress(String address) {
+        int colon = address.lastIndexOf(':');
+        if (colon <= 0) {
+            return new String[]{address, ""};
+        }
+        return new String[]{address.substring(0, colon).trim(), address.substring(colon + 1).trim()};
+    }
+
+    private void fetchPublicKeyForAddress() {
+        String address = addressField.getText().toString().trim();
+        if (address.isEmpty() || address.equals(lastFetchedAddress)) {
+            return;
+        }
+        String[] parts = parseAddress(address);
+        String host = parts[0];
+        int port;
+        try {
+            port = Integer.parseInt(parts[1]);
+        } catch (NumberFormatException e) {
+            return;
+        }
+        if (host.isEmpty() || port <= 0) {
+            return;
+        }
+        // Only auto-fill while the key field is empty or still holds our own
+        // previous auto-fetched value -- never clobber a manually pasted key.
+        String current = rsaField.getText().toString().trim();
+        if (!current.isEmpty() && !current.equals(autoFetchedRsaPublicKey)) {
+            return;
+        }
+        lastFetchedAddress = address;
+        OwpengramServers.fetchServerPublicKey(host, port, pem -> {
+            if (pem == null || !lastFetchedAddress.equals(address)) {
+                return;
+            }
+            String now = rsaField.getText().toString().trim();
+            if (!now.isEmpty() && !now.equals(autoFetchedRsaPublicKey)) {
+                return;
+            }
+            autoFetchedRsaPublicKey = pem;
+            rsaField.setText(pem);
+        });
+    }
+
     // --- Save logic ---
 
     private void save() {
         String name = nameField.getText().toString().trim();
-        String host = hostField.getText().toString().trim();
-        String portStr = portField.getText().toString().trim();
+        String address = addressField.getText().toString().trim();
+        String[] parts = parseAddress(address);
+        String host = parts[0];
 
         if (name.isEmpty()) {
             showFieldError(nameField, "Enter a name");
             return;
         }
         if (host.isEmpty()) {
-            showFieldError(hostField, "Enter host or IP");
+            showFieldError(addressField, "Enter host or IP");
             return;
         }
         int port;
         try {
-            port = Integer.parseInt(portStr);
+            port = Integer.parseInt(parts[1]);
             if (port < 1 || port > 65535) throw new NumberFormatException();
         } catch (NumberFormatException e) {
-            showFieldError(portField, "Invalid port (1-65535)");
+            showFieldError(addressField, "Invalid address, expected host:port");
             return;
         }
 

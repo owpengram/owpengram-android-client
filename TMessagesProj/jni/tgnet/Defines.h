@@ -27,7 +27,12 @@
 #define DOWNLOAD_CONNECTIONS_COUNT 2
 #define UPLOAD_CONNECTIONS_COUNT 4
 #define CONNECTION_BACKGROUND_KEEP_TIME 10000
-#define MAX_ACCOUNT_COUNT 10
+// Must stay in sync with UserConfig.MAX_ACCOUNT_COUNT (Java side) --
+// this sizes fixed-size native arrays (jniEnv[], etc.) indexed by
+// instanceNum; a mismatch causes silent out-of-bounds native writes/reads
+// (crash loop on startup, not a clean exception) once account count
+// exceeds whichever side is smaller.
+#define MAX_ACCOUNT_COUNT 50
 #define USE_DELEGATE_HOST_RESOLVE
 
 #define USE_IPV4_ONLY 0

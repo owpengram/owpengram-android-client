@@ -470,4 +470,32 @@ public class OwpengramServers {
     public static boolean canAddTelegramAccount() {
         return countTelegramAccounts() < telegramAccountLimit();
     }
+
+    /**
+     * Fetches a server's RSA public key from its well-known same-port HTTP
+     * endpoint (GET host:port/owpengram/server-info), so "Add Server" can be
+     * filled in from just host:port instead of a manual PEM copy-paste.
+     * callback receives the PEM string on success, or null on any failure
+     * (offline, unsupported server, malformed response) -- always on the UI
+     * thread (AsyncTask#onPostExecute).
+     */
+    public static void fetchServerPublicKey(String host, int port, org.telegram.messenger.Utilities.Callback<String> callback) {
+        if (TextUtils.isEmpty(host) || port <= 0) {
+            callback.run(null);
+            return;
+        }
+        String url = "http://" + host + ":" + port + "/owpengram/server-info";
+        new org.telegram.ui.web.HttpGetTask(body -> {
+            if (body == null) {
+                callback.run(null);
+                return;
+            }
+            try {
+                String pem = new JSONObject(body).optString("rsa_public_key_pem", "");
+                callback.run(pem.isEmpty() ? null : pem);
+            } catch (Exception e) {
+                callback.run(null);
+            }
+        }).execute(url);
+    }
 }
