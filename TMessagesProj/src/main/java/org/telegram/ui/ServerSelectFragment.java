@@ -473,20 +473,31 @@ public class ServerSelectFragment extends BaseFragment {
         ServerHolder(ServerCell c) { super(c); cell = c; }
     }
 
-    // Built-in server logos (pulled from the desktop client). Decoded once and
-    // cached. Custom servers fall back to the generated colored initial avatar.
+    // Built-in server logos (pulled from the desktop client) decode from a
+    // drawable resource; custom servers decode from OwpengramServer.logoPath
+    // (set by AddServerFragment, either auto-fetched from the server or
+    // picked locally). Decoded once and cached; a server with neither falls
+    // back to the generated colored initial avatar.
     private static final java.util.HashMap<String, android.graphics.Bitmap> SERVER_LOGO_CACHE = new java.util.HashMap<>();
-    private static android.graphics.Bitmap serverLogo(Context ctx, String id) {
+    private static android.graphics.Bitmap serverLogo(Context ctx, OwpengramServer server) {
+        if (ctx == null || server == null) return null;
         int res = 0;
-        if (OwpengramServers.ID_OWPENGRAM.equals(id)) res = org.telegram.messenger.R.drawable.server_owpengram;
-        else if (OwpengramServers.ID_TELEGRAM.equals(id)) res = org.telegram.messenger.R.drawable.server_telegram;
-        if (res == 0 || ctx == null) return null;
-        android.graphics.Bitmap b = SERVER_LOGO_CACHE.get(id);
+        if (TextUtils.isEmpty(server.logoPath)) {
+            if (OwpengramServers.ID_OWPENGRAM.equals(server.id)) res = org.telegram.messenger.R.drawable.server_owpengram;
+            else if (OwpengramServers.ID_TELEGRAM.equals(server.id)) res = org.telegram.messenger.R.drawable.server_telegram;
+            if (res == 0) return null;
+        }
+        // Keyed on logoPath too (not just id) so re-uploading a custom
+        // server's icon busts the cache instead of showing the stale one.
+        String cacheKey = server.id + "|" + (res != 0 ? String.valueOf(res) : server.logoPath);
+        android.graphics.Bitmap b = SERVER_LOGO_CACHE.get(cacheKey);
         if (b == null) {
             try {
-                b = android.graphics.BitmapFactory.decodeResource(ctx.getResources(), res);
+                b = res != 0
+                        ? android.graphics.BitmapFactory.decodeResource(ctx.getResources(), res)
+                        : android.graphics.BitmapFactory.decodeFile(server.logoPath);
             } catch (Throwable ignore) {}
-            if (b != null) SERVER_LOGO_CACHE.put(id, b);
+            if (b != null) SERVER_LOGO_CACHE.put(cacheKey, b);
         }
         return b;
     }
@@ -600,7 +611,7 @@ public class ServerSelectFragment extends BaseFragment {
             int hash = Math.abs(server.name.hashCode());
             avatarPaint.setColor(AVATAR_COLORS[hash % AVATAR_COLORS.length]);
 
-            logoBitmap = serverLogo(getContext(), server.id);
+            logoBitmap = serverLogo(getContext(), server);
             logoPaint.setShader(logoBitmap == null ? null : new android.graphics.BitmapShader(
                     logoBitmap,
                     android.graphics.Shader.TileMode.CLAMP,

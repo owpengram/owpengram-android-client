@@ -8,6 +8,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -372,7 +373,7 @@ public class ServerInfoFragment extends BaseFragment {
             txtPaint.setTextAlign(Paint.Align.CENTER);
             initial = server.name.isEmpty() ? "?" : String.valueOf(server.name.charAt(0)).toUpperCase();
 
-            logoBitmap = serverLogo(context, server.id);
+            logoBitmap = serverLogo(context, server);
             if (logoBitmap != null) {
                 logoPaint.setShader(new android.graphics.BitmapShader(logoBitmap,
                         android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP));
@@ -400,19 +401,27 @@ public class ServerInfoFragment extends BaseFragment {
             }
         }
 
-        // Built-in server logos pulled from the desktop client (cached).
+        // Built-in server logos decode from a drawable resource; custom
+        // servers decode from OwpengramServer.logoPath (see the identical
+        // comment on ServerSelectFragment's serverLogo -- kept in sync).
         private static final java.util.HashMap<String, android.graphics.Bitmap> LOGO_CACHE = new java.util.HashMap<>();
-        private static android.graphics.Bitmap serverLogo(Context ctx, String id) {
+        private static android.graphics.Bitmap serverLogo(Context ctx, OwpengramServer server) {
+            if (ctx == null || server == null) return null;
             int res = 0;
-            if (org.telegram.owpengram.OwpengramServers.ID_OWPENGRAM.equals(id)) res = org.telegram.messenger.R.drawable.server_owpengram;
-            else if (org.telegram.owpengram.OwpengramServers.ID_TELEGRAM.equals(id)) res = org.telegram.messenger.R.drawable.server_telegram;
-            if (res == 0 || ctx == null) return null;
-            android.graphics.Bitmap b = LOGO_CACHE.get(id);
+            if (TextUtils.isEmpty(server.logoPath)) {
+                if (org.telegram.owpengram.OwpengramServers.ID_OWPENGRAM.equals(server.id)) res = org.telegram.messenger.R.drawable.server_owpengram;
+                else if (org.telegram.owpengram.OwpengramServers.ID_TELEGRAM.equals(server.id)) res = org.telegram.messenger.R.drawable.server_telegram;
+                if (res == 0) return null;
+            }
+            String cacheKey = server.id + "|" + (res != 0 ? String.valueOf(res) : server.logoPath);
+            android.graphics.Bitmap b = LOGO_CACHE.get(cacheKey);
             if (b == null) {
                 try {
-                    b = android.graphics.BitmapFactory.decodeResource(ctx.getResources(), res);
+                    b = res != 0
+                            ? android.graphics.BitmapFactory.decodeResource(ctx.getResources(), res)
+                            : android.graphics.BitmapFactory.decodeFile(server.logoPath);
                 } catch (Throwable ignore) {}
-                if (b != null) LOGO_CACHE.put(id, b);
+                if (b != null) LOGO_CACHE.put(cacheKey, b);
             }
             return b;
         }

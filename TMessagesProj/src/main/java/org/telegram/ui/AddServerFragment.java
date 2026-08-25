@@ -3,8 +3,12 @@ package org.telegram.ui;
 import static org.telegram.messenger.AndroidUtilities.dp;
 
 import android.content.Context;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
+import android.net.Uri;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
@@ -12,12 +16,15 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.FileLog;
 import org.telegram.messenger.R;
 import org.telegram.owpengram.OwpengramServer;
 import org.telegram.owpengram.OwpengramServers;
@@ -26,6 +33,8 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.LayoutHelper;
+
+import java.io.InputStream;
 
 public class AddServerFragment extends BaseFragment {
 
@@ -50,13 +59,20 @@ public class AddServerFragment extends BaseFragment {
     private View advancedSection;
     private boolean advancedExpanded = false;
 
+    private ImageView iconPreview;
+
     // Suppresses re-fetching for an address we already have a result for.
     private String lastFetchedAddress = "";
-    // Set once a server icon has been auto-fetched and persisted locally
-    // (see OwpengramServers.saveFetchedIcon); applied to the server on save.
+    // Set once a server icon has been chosen (manually, via pickIcon()) or
+    // auto-fetched and persisted locally (see OwpengramServers.saveFetchedIcon);
+    // applied to the server on save.
     private String fetchedLogoPath;
     private final Runnable fetchDebounceRunnable = this::fetchPublicKeyForAddress;
     private static final int FETCH_DEBOUNCE_MS = 500;
+    private static final int REQUEST_PICK_ICON = 42;
+    // Matches SaveCustomServerLogo's target size on the desktop client, so a
+    // server's icon looks the same regardless of which client uploaded it.
+    private static final int ICON_TARGET_SIZE = 256;
 
     private static final int DEFAULT_SINGLE_MAIN_DC = 2;
 
@@ -92,6 +108,7 @@ public class AddServerFragment extends BaseFragment {
         // Section: name + description
         content.addView(buildSectionHeader(context, "General"));
         LinearLayout section1 = buildCard(context);
+        buildIconRow(context, section1);
         nameField = buildField(context, "Name", InputType.TYPE_CLASS_TEXT, EditorInfo.IME_ACTION_NEXT);
         addFieldToCard(section1, nameField, true);
         descField = buildField(context, "Description (optional)", InputType.TYPE_CLASS_TEXT, EditorInfo.IME_ACTION_NEXT);
@@ -179,6 +196,10 @@ public class AddServerFragment extends BaseFragment {
             multiDcEnabled = editingServer.multiDc;
             updateToggleState();
             updateMainDcVisibility();
+            if (editingServer.logoPath != null && !editingServer.logoPath.isEmpty()) {
+                fetchedLogoPath = editingServer.logoPath;
+                updateIconPreview(editingServer.logoPath);
+            }
             // Show what's already configured instead of hiding it behind a
             // tap -- Advanced only collapses by default for the new-server,
             // auto-fetch-does-everything case.
@@ -250,13 +271,76 @@ public class AddServerFragment extends BaseFragment {
                     if (bitmap == null || !lastFetchedAddress.equals(address)) {
                         return;
                     }
-                    String path = OwpengramServers.saveFetchedIcon(bitmap);
-                    if (path != null) {
-                        fetchedLogoPath = path;
-                    }
+                    applyIconBitmap(bitmap);
                 });
             }
         });
+    }
+
+    // --- Icon picking (manual) + shared apply path with auto-fetch ---
+
+    private void pickIcon() {
+        try {
+            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("image/*");
+            startActivityForResult(intent, REQUEST_PICK_ICON);
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+    }
+
+    @Override
+    public void onActivityResultFragment(int requestCode, int resultCode, Intent data) {
+        if (requestCode != REQUEST_PICK_ICON || data == null || data.getData() == null) {
+            return;
+        }
+        Uri uri = data.getData();
+        try (InputStream in = ApplicationLoader.applicationContext.getContentResolver().openInputStream(uri)) {
+            Bitmap bitmap = in != null ? BitmapFactory.decodeStream(in) : null;
+            if (bitmap == null) {
+                return;
+            }
+            applyIconBitmap(bitmap);
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+    }
+
+    /** Center-crops to square, matching the desktop client's SaveCustomServerLogo. */
+    private static Bitmap cropSquare(Bitmap src) {
+        int side = Math.min(src.getWidth(), src.getHeight());
+        if (side <= 0) {
+            return null;
+        }
+        Bitmap cropped = Bitmap.createBitmap(src, (src.getWidth() - side) / 2, (src.getHeight() - side) / 2, side, side);
+        if (side != ICON_TARGET_SIZE) {
+            cropped = Bitmap.createScaledBitmap(cropped, ICON_TARGET_SIZE, ICON_TARGET_SIZE, true);
+        }
+        return cropped;
+    }
+
+    /** Shared by both the manual picker and the auto-fetch-on-address callback. */
+    private void applyIconBitmap(Bitmap bitmap) {
+        Bitmap square = cropSquare(bitmap);
+        if (square == null) {
+            return;
+        }
+        String path = OwpengramServers.saveFetchedIcon(square);
+        if (path == null) {
+            return;
+        }
+        fetchedLogoPath = path;
+        updateIconPreview(path);
+    }
+
+    private void updateIconPreview(String path) {
+        if (iconPreview == null || path == null) {
+            return;
+        }
+        Bitmap bitmap = BitmapFactory.decodeFile(path);
+        if (bitmap != null) {
+            iconPreview.setImageBitmap(bitmap);
+        }
     }
 
     // --- Save logic ---
@@ -337,6 +421,32 @@ public class AddServerFragment extends BaseFragment {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         tv.setLayoutParams(lp);
         return tv;
+    }
+
+    private void buildIconRow(Context context, LinearLayout card) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(16), dp(12), dp(16), dp(12));
+        row.setBackground(Theme.getSelectorDrawable(true));
+        row.setClickable(true);
+        row.setOnClickListener(v -> pickIcon());
+
+        iconPreview = new ImageView(context);
+        iconPreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        iconPreview.setBackground(Theme.createRoundRectDrawable(dp(28), Theme.getColor(Theme.key_windowBackgroundGray)));
+        iconPreview.setClipToOutline(true);
+        row.addView(iconPreview, LayoutHelper.createLinear(56, 56));
+
+        TextView label = new TextView(context);
+        label.setText("Choose icon");
+        label.setTextSize(15);
+        label.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
+        label.setPadding(dp(14), 0, 0, 0);
+        row.addView(label, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
+
+        card.addView(row);
+        addDividerToCard(card, context);
     }
 
     private LinearLayout buildCard(Context context) {

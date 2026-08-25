@@ -546,11 +546,13 @@ public class OwpengramServers {
     }
 
     /**
-     * Persists a fetched icon bitmap under the app's own files directory
-     * (mirrors the desktop client's owpengram_server_logos/ convention) and
-     * returns the absolute path to store as OwpengramServer.logoPath --
-     * unlike a cache-dir temp file, this survives Android reclaiming cache
-     * space, since it's the server's permanent logo once saved.
+     * Persists a server icon bitmap -- auto-fetched from the server or
+     * picked locally by the user (see AddServerFragment.pickIcon /
+     * applyIconBitmap) -- under the app's own files directory (mirrors the
+     * desktop client's owpengram_server_logos/ convention) and returns the
+     * absolute path to store as OwpengramServer.logoPath. Unlike a cache-dir
+     * temp file, this survives Android reclaiming cache space, since it's
+     * the server's permanent logo once saved.
      */
     public static String saveFetchedIcon(Bitmap bitmap) {
         if (bitmap == null) {
