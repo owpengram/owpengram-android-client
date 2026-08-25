@@ -52,6 +52,9 @@ public class AddServerFragment extends BaseFragment {
 
     // Suppresses re-fetching for an address we already have a result for.
     private String lastFetchedAddress = "";
+    // Set once a server icon has been auto-fetched and persisted locally
+    // (see OwpengramServers.saveFetchedIcon); applied to the server on save.
+    private String fetchedLogoPath;
     private final Runnable fetchDebounceRunnable = this::fetchPublicKeyForAddress;
     private static final int FETCH_DEBOUNCE_MS = 500;
 
@@ -236,6 +239,23 @@ public class AddServerFragment extends BaseFragment {
             if (result.dcId > 0) {
                 mainDcField.setText(String.valueOf(result.dcId));
             }
+            if (result.name != null && !result.name.isEmpty()) {
+                nameField.setText(result.name);
+            }
+            if (result.description != null && !result.description.isEmpty()) {
+                descField.setText(result.description);
+            }
+            if (result.hasIcon) {
+                OwpengramServers.fetchServerIcon(host, port, bitmap -> {
+                    if (bitmap == null || !lastFetchedAddress.equals(address)) {
+                        return;
+                    }
+                    String path = OwpengramServers.saveFetchedIcon(bitmap);
+                    if (path != null) {
+                        fetchedLogoPath = path;
+                    }
+                });
+            }
         });
     }
 
@@ -289,6 +309,9 @@ public class AddServerFragment extends BaseFragment {
         server.rsaPublicKey = rsaField.getText().toString().trim();
         server.multiDc     = multiDcEnabled;
         server.mainDcId    = mainDc;
+        if (fetchedLogoPath != null) {
+            server.logoPath = fetchedLogoPath;
+        }
 
         if (editingServer != null) {
             OwpengramServers.updateCustomServer(server);

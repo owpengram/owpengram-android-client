@@ -7,12 +7,16 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import android.text.TextUtils;
 
+import android.graphics.Bitmap;
+
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.UserConfig;
 import org.telegram.tgnet.ConnectionsManager;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -474,20 +478,30 @@ public class OwpengramServers {
     public static class ServerInfoFetchResult {
         public final String rsaPublicKeyPem;
         public final int dcId;
+        // name/description/hasIcon are admin-edited on the server (Server
+        // Settings' identity section) and optional -- empty/false means the
+        // operator hasn't set them, not that the server failed to answer.
+        public final String name;
+        public final String description;
+        public final boolean hasIcon;
 
-        public ServerInfoFetchResult(String rsaPublicKeyPem, int dcId) {
+        public ServerInfoFetchResult(String rsaPublicKeyPem, int dcId, String name, String description, boolean hasIcon) {
             this.rsaPublicKeyPem = rsaPublicKeyPem;
             this.dcId = dcId;
+            this.name = name;
+            this.description = description;
+            this.hasIcon = hasIcon;
         }
     }
 
     /**
-     * Fetches a server's RSA public key and home DC id from its well-known
-     * same-port HTTP endpoint (GET host:port/owpengram/server-info), so "Add
-     * Server" can be filled in from just host:port instead of manual PEM
-     * copy-paste + guessing the DC id. callback receives the result on
-     * success, or null on any failure (offline, unsupported server,
-     * malformed response) -- always on the UI thread (AsyncTask#onPostExecute).
+     * Fetches a server's RSA public key, home DC id, and identity
+     * (name/description/icon presence) from its well-known same-port HTTP
+     * endpoint (GET host:port/owpengram/server-info), so "Add Server" can be
+     * filled in from just host:port instead of manual PEM copy-paste +
+     * guessing the DC id. callback receives the result on success, or null
+     * on any failure (offline, unsupported server, malformed response) --
+     * always on the UI thread (AsyncTask#onPostExecute).
      */
     public static void fetchServerInfo(String host, int port, org.telegram.messenger.Utilities.Callback<ServerInfoFetchResult> callback) {
         if (TextUtils.isEmpty(host) || port <= 0) {
@@ -504,10 +518,56 @@ public class OwpengramServers {
                 JSONObject obj = new JSONObject(body);
                 String pem = obj.optString("rsa_public_key_pem", "");
                 int dcId = obj.optInt("dc_id", 0);
-                callback.run(pem.isEmpty() ? null : new ServerInfoFetchResult(pem, dcId));
+                String name = obj.optString("name", "");
+                String description = obj.optString("description", "");
+                boolean hasIcon = obj.optBoolean("has_icon", false);
+                callback.run(pem.isEmpty() ? null : new ServerInfoFetchResult(pem, dcId, name, description, hasIcon));
             } catch (Exception e) {
                 callback.run(null);
             }
         }).execute(url);
+    }
+
+    private static final String SERVER_LOGOS_DIR = "owpengram_server_logos";
+
+    /**
+     * Fetches a server's icon (GET host:port/owpengram/server-icon) -- only
+     * worth calling when a prior fetchServerInfo answered with hasIcon=true.
+     * callback receives the decoded bitmap on success, or null on any
+     * failure -- always on the UI thread (AsyncTask#onPostExecute).
+     */
+    public static void fetchServerIcon(String host, int port, org.telegram.messenger.Utilities.Callback<Bitmap> callback) {
+        if (TextUtils.isEmpty(host) || port <= 0) {
+            callback.run(null);
+            return;
+        }
+        String url = "http://" + host + ":" + port + "/owpengram/server-icon";
+        new org.telegram.ui.web.HttpGetBitmapTask(callback::run).execute(url);
+    }
+
+    /**
+     * Persists a fetched icon bitmap under the app's own files directory
+     * (mirrors the desktop client's owpengram_server_logos/ convention) and
+     * returns the absolute path to store as OwpengramServer.logoPath --
+     * unlike a cache-dir temp file, this survives Android reclaiming cache
+     * space, since it's the server's permanent logo once saved.
+     */
+    public static String saveFetchedIcon(Bitmap bitmap) {
+        if (bitmap == null) {
+            return null;
+        }
+        File dir = new File(ApplicationLoader.applicationContext.getFilesDir(), SERVER_LOGOS_DIR);
+        if (!dir.exists() && !dir.mkdirs()) {
+            FileLog.e("OwpengramServers: failed to create " + dir);
+            return null;
+        }
+        File file = new File(dir, "fetched_" + System.currentTimeMillis() + ".png");
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+        } catch (Exception e) {
+            FileLog.e(e);
+            return null;
+        }
+        return file.getAbsolutePath();
     }
 }
