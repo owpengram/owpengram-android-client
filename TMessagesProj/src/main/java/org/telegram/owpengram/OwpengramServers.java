@@ -391,6 +391,27 @@ public class OwpengramServers {
                 .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
 
+    /**
+     * Every activated account whose current server resolves to serverId --
+     * used to warn before deleting a custom server that doing so will orphan
+     * those accounts (see ServerInfoFragment.confirmDelete), since nothing
+     * else keeps an account pointed at a server that no longer exists in the
+     * list from silently breaking.
+     */
+    public static List<Integer> accountsUsingServer(String serverId) {
+        List<Integer> result = new ArrayList<>();
+        if (TextUtils.isEmpty(serverId)) {
+            return result;
+        }
+        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+            if (UserConfig.getInstance(a).isClientActivated()
+                    && serverId.equals(getServerIdForAccount(a))) {
+                result.add(a);
+            }
+        }
+        return result;
+    }
+
     /** Returns true when at least one active account uses a Telegram-official server. */
     public static boolean anyAccountIsTelegram() {
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {

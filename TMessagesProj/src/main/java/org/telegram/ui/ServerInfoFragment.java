@@ -16,6 +16,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.owpengram.OwpengramServer;
@@ -28,6 +29,7 @@ import org.telegram.ui.Components.LayoutHelper;
 
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -339,10 +341,25 @@ public class ServerInfoFragment extends BaseFragment {
     }
 
     private void confirmDelete() {
+        // Nothing else keeps an account pointed at a server that no longer
+        // exists in the list from silently breaking, so rather than leave
+        // that account around in a broken state, warn up front and actually
+        // log it out as part of this same confirmation, instead of letting a
+        // stale account for a server nobody's going to use again linger in
+        // the switcher.
+        List<Integer> affected = OwpengramServers.accountsUsingServer(server.id);
+        String message = affected.isEmpty()
+                ? "Server \"" + server.name + "\" and all related settings will be deleted."
+                : "Server \"" + server.name + "\" and all related settings will be deleted. This will log out "
+                        + affected.size() + (affected.size() == 1 ? " account" : " accounts")
+                        + " signed in to it.";
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
         builder.setTitle("Delete server?");
-        builder.setMessage("Server \"" + server.name + "\" and all related settings will be deleted.");
+        builder.setMessage(message);
         builder.setPositiveButton("Delete", (dialog, which) -> {
+            for (int account : affected) {
+                MessagesController.getInstance(account).performLogout(1);
+            }
             OwpengramServers.removeCustomServer(server.id);
             if (onDeleted != null) onDeleted.run();
             finishFragment();
