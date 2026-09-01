@@ -1343,28 +1343,29 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     /**
-     * Handles an owpg://addserver?name=...&host=...&port=...&key=...
-     * link: an operator's "add my server" onboarding link, letting them hand
-     * out a single URL (website, message, QR code) that opens the add-server
-     * form pre-filled, so the user just reviews and taps Save. Required:
-     * name, host, port, key. Optional: description, dc (home DC id, absent/0
-     * = auto), multidc ("1" = true).
+     * Handles an owpg://addserver?host=...&port=... link: an operator's
+     * "add my server" onboarding link, letting them hand out a single URL
+     * (website, message, QR code) that opens the add-server form pre-filled
+     * with just the address, so the user reviews and taps Save. Deliberately
+     * carries nothing else -- see this method's body comment for why a
+     * name/description/key/DC embedded in the link itself would be a MITM
+     * vector, not a convenience worth the risk.
      */
     private void handleOwpengramAddServerLink(Uri data) {
-        String name = data.getQueryParameter("name");
         String host = data.getQueryParameter("host");
         String portParam = data.getQueryParameter("port");
-        String key = data.getQueryParameter("key");
-        String description = data.getQueryParameter("description");
-        String dcParam = data.getQueryParameter("dc");
-        String multiDcParam = data.getQueryParameter("multidc");
 
-        // Only host+port are required. An OwpenGram server answers with its
-        // own name/description/key/DC when AddServerFragment asks (see the
-        // fetchPublicKeyForAddress() call triggered below when the link
-        // omits the key), so a link to one of our own servers can stay
-        // short -- name/key/etc only matter for a non-OwpenGram/custom
-        // backend that doesn't implement that discovery endpoint.
+        // Only host+port are ever read from this link -- deliberately never
+        // name/description/key/dc/multidc, even if a link happens to carry
+        // them. Whoever crafts a link (a forum post, a chat message, an
+        // intercepted share) fully controls its contents; if a forged key
+        // pointed at an attacker's own host were accepted from it, the app
+        // would trust that as "this server's identity" outright -- a real
+        // MITM vector, not a hypothetical one. host+port alone can't
+        // misrepresent anything: name/description/key/DC always come from
+        // whatever actually answers at that address (the same
+        // fetchPublicKeyForAddress() discovery a hand-typed address
+        // triggers, via the empty rsaPublicKey below), never from the link.
         if (TextUtils.isEmpty(host) || TextUtils.isEmpty(portParam)) {
             showOwpengramAddServerLinkErrorDialog();
             return;
@@ -1378,25 +1379,17 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             return;
         }
 
-        int dc = 0;
-        if (!TextUtils.isEmpty(dcParam)) {
-            try {
-                dc = Integer.parseInt(dcParam.trim());
-            } catch (NumberFormatException ignore) {
-            }
-        }
-
         // Prefill only -- id stays unset so AddServerFragment.save() treats
         // this as a brand-new server (addCustomServer mints the id) rather
         // than an edit of an existing one (updateCustomServer, keyed by id).
         OwpengramServer server = new OwpengramServer();
-        server.name = name != null ? name.trim() : "";
+        // OwpengramServer.name has no field initializer (defaults to null in
+        // Java, unlike description/rsaPublicKey which do) -- set it
+        // explicitly so AddServerFragment's nameField.setText(editingServer.name)
+        // gets an empty string, not null.
+        server.name = "";
         server.host = host.trim();
         server.port = port;
-        server.description = description != null ? description.trim() : "";
-        server.rsaPublicKey = key != null ? key.trim() : "";
-        server.multiDc = "1".equals(multiDcParam);
-        server.mainDcId = Math.max(dc, 0);
 
         // fetchPublicKeyForAddress() inside AddServerFragment's own prefill
         // handles the "key missing, ask the server" case; nothing extra to
@@ -2156,9 +2149,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                                     }
                                     return false;
                                 case "owpg": {
-                                    // owpg://addserver?name=...&host=...&port=...&key=...[&description=...&dc=...&multidc=1]
-                                    // An operator's "add my server" onboarding link. Uri.getHost()
-                                    // separates the authority from the path/query regardless of
+                                    // owpg://addserver?host=...&port=...
+                                    // An operator's "add my server" onboarding link -- host+port
+                                    // only, see handleOwpengramAddServerLink's doc comment for why.
+                                    // Uri.getHost() separates the authority from the path/query regardless of
                                     // whether a browser normalized the path-less URL by inserting a
                                     // "/" before the "?" (owpg://addserver/?... vs owpg://addserver?...),
                                     // so this check is already robust to both forms.
