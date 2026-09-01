@@ -44,6 +44,12 @@ public class AddServerFragment extends BaseFragment {
 
     private final OwpengramServer editingServer;
     private final OnSavedListener onSavedListener;
+    // True only when editingServer is an actual saved server being edited (has
+    // an id). A link-prefilled or otherwise id-less server still populates
+    // editingServer (so the form is prefilled) but must go through the
+    // add-new path on save, since OwpengramServers.updateCustomServer() looks
+    // the row up by id and would NPE/no-op on an id-less server.
+    private final boolean isExistingServer;
 
     private EditTextBoldCursor nameField;
     private EditTextBoldCursor addressField;
@@ -79,13 +85,14 @@ public class AddServerFragment extends BaseFragment {
     public AddServerFragment(OwpengramServer existing, OnSavedListener listener) {
         this.editingServer    = existing;
         this.onSavedListener  = listener;
+        this.isExistingServer = existing != null && existing.id != null && !existing.id.isEmpty();
     }
 
     @Override
     public View createView(Context context) {
         boolean isEdit = (editingServer != null);
         actionBar.setBackButtonImage(R.drawable.ic_ab_back);
-        actionBar.setTitle(isEdit ? "Edit Server" : "New Server");
+        actionBar.setTitle(isExistingServer ? "Edit Server" : "New Server");
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
             public void onItemClick(int id) {
@@ -204,6 +211,17 @@ public class AddServerFragment extends BaseFragment {
             // tap -- Advanced only collapses by default for the new-server,
             // auto-fetch-does-everything case.
             toggleAdvanced();
+            // An owpg://addserver link only has to carry host+port -- an
+            // OwpenGram server answers with its own name/description/key/DC
+            // on request (the same discovery a hand-typed address triggers
+            // via the TextWatcher below), so a link for one of our own
+            // servers can stay short. A non-OwpenGram/custom backend that
+            // doesn't implement that endpoint needs the key spelled out in
+            // the link itself instead -- rsaPublicKey is then already
+            // non-empty here, so no fetch is triggered.
+            if (editingServer.rsaPublicKey == null || editingServer.rsaPublicKey.isEmpty()) {
+                fetchPublicKeyForAddress();
+            }
         }
 
         fragmentView = new FrameLayout(context);
@@ -368,12 +386,11 @@ public class AddServerFragment extends BaseFragment {
             return;
         }
 
-        OwpengramServer server;
-        if (editingServer != null) {
-            server = editingServer;
-        } else {
-            server = new OwpengramServer();
-        }
+        // Reuse editingServer as the object we mutate even when it's just a
+        // link-prefilled, id-less server -- addCustomServer() below mints the
+        // id itself. Only an actual existing (has-id) server goes through
+        // updateCustomServer().
+        OwpengramServer server = (editingServer != null) ? editingServer : new OwpengramServer();
         int mainDc;
         if (multiDcEnabled) {
             mainDc = 2; // Telegram-compatible servers always home on DC 2
@@ -397,7 +414,7 @@ public class AddServerFragment extends BaseFragment {
             server.logoPath = fetchedLogoPath;
         }
 
-        if (editingServer != null) {
+        if (isExistingServer) {
             OwpengramServers.updateCustomServer(server);
         } else {
             OwpengramServers.addCustomServer(server);

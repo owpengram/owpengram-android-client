@@ -1342,6 +1342,81 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         }
     }
 
+    /**
+     * Handles an owpg://addserver?name=...&host=...&port=...&key=...
+     * link: an operator's "add my server" onboarding link, letting them hand
+     * out a single URL (website, message, QR code) that opens the add-server
+     * form pre-filled, so the user just reviews and taps Save. Required:
+     * name, host, port, key. Optional: description, dc (home DC id, absent/0
+     * = auto), multidc ("1" = true).
+     */
+    private void handleOwpengramAddServerLink(Uri data) {
+        String name = data.getQueryParameter("name");
+        String host = data.getQueryParameter("host");
+        String portParam = data.getQueryParameter("port");
+        String key = data.getQueryParameter("key");
+        String description = data.getQueryParameter("description");
+        String dcParam = data.getQueryParameter("dc");
+        String multiDcParam = data.getQueryParameter("multidc");
+
+        // Only host+port are required. An OwpenGram server answers with its
+        // own name/description/key/DC when AddServerFragment asks (see the
+        // fetchPublicKeyForAddress() call triggered below when the link
+        // omits the key), so a link to one of our own servers can stay
+        // short -- name/key/etc only matter for a non-OwpenGram/custom
+        // backend that doesn't implement that discovery endpoint.
+        if (TextUtils.isEmpty(host) || TextUtils.isEmpty(portParam)) {
+            showOwpengramAddServerLinkErrorDialog();
+            return;
+        }
+        int port;
+        try {
+            port = Integer.parseInt(portParam.trim());
+            if (port < 1 || port > 65535) throw new NumberFormatException();
+        } catch (NumberFormatException e) {
+            showOwpengramAddServerLinkErrorDialog();
+            return;
+        }
+
+        int dc = 0;
+        if (!TextUtils.isEmpty(dcParam)) {
+            try {
+                dc = Integer.parseInt(dcParam.trim());
+            } catch (NumberFormatException ignore) {
+            }
+        }
+
+        // Prefill only -- id stays unset so AddServerFragment.save() treats
+        // this as a brand-new server (addCustomServer mints the id) rather
+        // than an edit of an existing one (updateCustomServer, keyed by id).
+        OwpengramServer server = new OwpengramServer();
+        server.name = name != null ? name.trim() : "";
+        server.host = host.trim();
+        server.port = port;
+        server.description = description != null ? description.trim() : "";
+        server.rsaPublicKey = key != null ? key.trim() : "";
+        server.multiDc = "1".equals(multiDcParam);
+        server.mainDcId = Math.max(dc, 0);
+
+        // fetchPublicKeyForAddress() inside AddServerFragment's own prefill
+        // handles the "key missing, ask the server" case; nothing extra to
+        // trigger from here.
+        presentFragment(new AddServerFragment(server, saved ->
+                Toast.makeText(LaunchActivity.this, "Server \"" + saved.name + "\" added", Toast.LENGTH_SHORT).show()));
+    }
+
+    /** Shown when an owpg://addserver link is missing required fields or has an invalid port/key. */
+    private void showOwpengramAddServerLinkErrorDialog() {
+        try {
+            AlertDialog.Builder b = new AlertDialog.Builder(this);
+            b.setTitle(LocaleController.getString(R.string.AppName));
+            b.setMessage("This add-server link is missing required information and could not be opened.");
+            b.setPositiveButton(LocaleController.getString(R.string.OK), null);
+            b.show();
+        } catch (Exception ignore) {
+        }
+    }
+
     private void showNeedTelegramAccountDialog() {
         try {
             AlertDialog.Builder b = new AlertDialog.Builder(this);
@@ -2081,6 +2156,20 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                                     }
                                     return false;
                                 case "owpg": {
+                                    // owpg://addserver?name=...&host=...&port=...&key=...[&description=...&dc=...&multidc=1]
+                                    // An operator's "add my server" onboarding link. Uri.getHost()
+                                    // separates the authority from the path/query regardless of
+                                    // whether a browser normalized the path-less URL by inserting a
+                                    // "/" before the "?" (owpg://addserver/?... vs owpg://addserver?...),
+                                    // so this check is already robust to both forms.
+                                    if ("addserver".equalsIgnoreCase(data.getHost())) {
+                                        if (progress != null) {
+                                            progress.end();
+                                        }
+                                        handleOwpengramAddServerLink(data);
+                                        intent.setAction(null);
+                                        return false;
+                                    }
                                     // OwpenGram self-hosted scheme: owpg://<host>/<rest>. The host
                                     // identifies which server (me_url_prefix) the link belongs to.
                                     // Reinterpret as https://<host>/<rest> and fall through to the
