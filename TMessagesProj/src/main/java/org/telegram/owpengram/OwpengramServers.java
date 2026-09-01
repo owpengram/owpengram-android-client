@@ -15,11 +15,14 @@ import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.UserConfig;
 import org.telegram.tgnet.ConnectionsManager;
 
+import org.telegram.messenger.AndroidUtilities;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class OwpengramServers {
 
@@ -32,6 +35,23 @@ public class OwpengramServers {
 
     /** Public repository of the OwpenGram server, opened from the settings entry. */
     public static final String SERVER_REPO_URL = "https://github.com/owpengram/owpengram-server";
+
+    // Fired whenever the stored custom-server list changes (add/update/remove,
+    // from ANY code path -- including one triggered from outside the
+    // currently-visible UI, e.g. an owpg://addserver link opened while
+    // ServerSelectFragment already happens to be showing). Any UI presenting
+    // that list should register here instead of only refreshing from its own
+    // local "just saved" callback, or it goes stale until the user leaves the
+    // fragment and comes back. Always delivered on the UI thread.
+    private static final CopyOnWriteArrayList<Runnable> customServersChangedListeners = new CopyOnWriteArrayList<>();
+
+    public static void addCustomServersChangedListener(Runnable listener) {
+        customServersChangedListeners.add(listener);
+    }
+
+    public static void removeCustomServersChangedListener(Runnable listener) {
+        customServersChangedListeners.remove(listener);
+    }
 
     private static final String DEFAULT_HOST = "152.89.254.50";
     private static final int    DEFAULT_PORT = 2398;
@@ -138,7 +158,17 @@ public class OwpengramServers {
             getPrefs().edit().putString(KEY_CUSTOM_SERVERS, array.toString()).apply();
         } catch (Exception e) {
             FileLog.e(e);
+            return;
         }
+        // Single choke point every addCustomServer/updateCustomServer/
+        // removeCustomServer writes through, so notifying here (rather than
+        // separately in each of those three) can never drift out of sync
+        // with a future fourth mutator.
+        AndroidUtilities.runOnUIThread(() -> {
+            for (Runnable listener : customServersChangedListeners) {
+                listener.run();
+            }
+        });
     }
 
     public static void addCustomServer(OwpengramServer server) {

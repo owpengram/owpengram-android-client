@@ -98,12 +98,20 @@ public class ServerSelectFragment extends BaseFragment {
     private Runnable connectPoll;
     private boolean destroyed;
 
+    // Refreshes this screen's list when the custom-server list changes from
+    // outside it -- e.g. an owpg://addserver link opened from a browser
+    // while this fragment already happens to be on screen. Without this,
+    // a just-added server only shows up after leaving and re-entering the
+    // screen (which re-triggers onFragmentCreate -> reloadServers()).
+    private final Runnable customServersChangedListener = this::reloadServers;
+
     // --- Lifecycle ---
 
     @Override
     public boolean onFragmentCreate() {
         reloadServers();
         pingAll();
+        OwpengramServers.addCustomServersChangedListener(customServersChangedListener);
         return true;
     }
 
@@ -139,6 +147,7 @@ public class ServerSelectFragment extends BaseFragment {
         destroyed = true;
         if (connectPoll != null) uiHandler.removeCallbacks(connectPoll);
         pingPool.shutdownNow();
+        OwpengramServers.removeCustomServersChangedListener(customServersChangedListener);
         super.onFragmentDestroy();
     }
 
