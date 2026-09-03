@@ -14,6 +14,12 @@ import java.util.Map;
 
 public class HttpGetTask extends AsyncTask<String, Void, String> {
 
+    // HttpURLConnection defaults to an infinite timeout for both connect and
+    // read -- an unreachable/wrong host:port (e.g. mid-typed in Add Server)
+    // would otherwise hang far longer than any UI flow should ever wait.
+    private static final int CONNECT_TIMEOUT_MS = 4000;
+    private static final int READ_TIMEOUT_MS = 6000;
+
     private final HashMap<String, String> headers = new HashMap<>();
     private final Utilities.Callback<String> callback;
     private Exception exception;
@@ -34,6 +40,8 @@ public class HttpGetTask extends AsyncTask<String, Void, String> {
         try {
             URL url = new URL(urlString);
             HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
+            urlConnection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            urlConnection.setReadTimeout(READ_TIMEOUT_MS);
             for (Map.Entry<String, String> e : headers.entrySet()) {
                 if (e.getKey() == null || e.getValue() == null) continue;
                 urlConnection.setRequestProperty(e.getKey(), e.getValue());

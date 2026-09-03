@@ -69,6 +69,11 @@ public class AddServerFragment extends BaseFragment {
 
     // Suppresses re-fetching for an address we already have a result for.
     private String lastFetchedAddress = "";
+    // In-flight requests, cancelled whenever a newer fetch starts -- avoids
+    // burning the (parallel, but still finite) thread pool on a request for
+    // an address the user has already moved past (e.g. mid-typed port).
+    private org.telegram.ui.web.HttpGetTask currentInfoFetch;
+    private org.telegram.ui.web.HttpGetBitmapTask currentIconFetch;
     // Set once a server icon has been chosen (manually, via pickIcon()) or
     // auto-fetched and persisted locally (see OwpengramServers.saveFetchedIcon);
     // applied to the server on save.
@@ -264,8 +269,15 @@ public class AddServerFragment extends BaseFragment {
             return;
         }
         lastFetchedAddress = address;
+        if (currentInfoFetch != null) {
+            currentInfoFetch.cancel(true);
+        }
+        if (currentIconFetch != null) {
+            currentIconFetch.cancel(true);
+            currentIconFetch = null;
+        }
         addressSpinner.setVisibility(View.VISIBLE);
-        OwpengramServers.fetchServerInfo(host, port, result -> {
+        currentInfoFetch = OwpengramServers.fetchServerInfo(host, port, result -> {
             addressSpinner.setVisibility(View.GONE);
             if (result == null || !lastFetchedAddress.equals(address)) {
                 return;
@@ -285,7 +297,7 @@ public class AddServerFragment extends BaseFragment {
                 descField.setText(result.description);
             }
             if (result.hasIcon) {
-                OwpengramServers.fetchServerIcon(host, port, bitmap -> {
+                currentIconFetch = OwpengramServers.fetchServerIcon(host, port, bitmap -> {
                     if (bitmap == null || !lastFetchedAddress.equals(address)) {
                         return;
                     }

@@ -18,6 +18,11 @@ import java.util.Map;
 
 public class HttpGetBitmapTask extends AsyncTask<String, Void, Bitmap> {
 
+    // See HttpGetTask -- HttpURLConnection defaults to an infinite timeout
+    // otherwise.
+    private static final int CONNECT_TIMEOUT_MS = 4000;
+    private static final int READ_TIMEOUT_MS = 6000;
+
     private final HashMap<String, String> headers = new HashMap<>();
     private final Utilities.Callback<Bitmap> callback;
     private Exception exception;
@@ -38,6 +43,8 @@ public class HttpGetBitmapTask extends AsyncTask<String, Void, Bitmap> {
         try {
             URL url = new URL(urlString);
             HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
+            urlConnection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            urlConnection.setReadTimeout(READ_TIMEOUT_MS);
             for (Map.Entry<String, String> e : headers.entrySet()) {
                 if (e.getKey() == null || e.getValue() == null) continue;
                 urlConnection.setRequestProperty(e.getKey(), e.getValue());

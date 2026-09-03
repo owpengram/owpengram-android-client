@@ -568,13 +568,13 @@ public class OwpengramServers {
      * on any failure (offline, unsupported server, malformed response) --
      * always on the UI thread (AsyncTask#onPostExecute).
      */
-    public static void fetchServerInfo(String host, int port, org.telegram.messenger.Utilities.Callback<ServerInfoFetchResult> callback) {
+    public static org.telegram.ui.web.HttpGetTask fetchServerInfo(String host, int port, org.telegram.messenger.Utilities.Callback<ServerInfoFetchResult> callback) {
         if (TextUtils.isEmpty(host) || port <= 0) {
             callback.run(null);
-            return;
+            return null;
         }
         String url = "http://" + host + ":" + port + "/owpengram/server-info";
-        new org.telegram.ui.web.HttpGetTask(body -> {
+        org.telegram.ui.web.HttpGetTask task = new org.telegram.ui.web.HttpGetTask(body -> {
             if (body == null) {
                 callback.run(null);
                 return;
@@ -590,7 +590,14 @@ public class OwpengramServers {
             } catch (Exception e) {
                 callback.run(null);
             }
-        }).execute(url);
+        });
+        // executeOnExecutor(THREAD_POOL_EXECUTOR, ...) instead of plain execute():
+        // AsyncTask#execute() queues onto one shared app-wide SERIAL_EXECUTOR, so a
+        // still-in-flight request (e.g. against an address the user hasn't finished
+        // typing yet) would otherwise block every later request -- including this
+        // very call's own retry with the corrected address -- until it finishes.
+        task.executeOnExecutor(android.os.AsyncTask.THREAD_POOL_EXECUTOR, url);
+        return task;
     }
 
     private static final String SERVER_LOGOS_DIR = "owpengram_server_logos";
@@ -601,13 +608,15 @@ public class OwpengramServers {
      * callback receives the decoded bitmap on success, or null on any
      * failure -- always on the UI thread (AsyncTask#onPostExecute).
      */
-    public static void fetchServerIcon(String host, int port, org.telegram.messenger.Utilities.Callback<Bitmap> callback) {
+    public static org.telegram.ui.web.HttpGetBitmapTask fetchServerIcon(String host, int port, org.telegram.messenger.Utilities.Callback<Bitmap> callback) {
         if (TextUtils.isEmpty(host) || port <= 0) {
             callback.run(null);
-            return;
+            return null;
         }
         String url = "http://" + host + ":" + port + "/owpengram/server-icon";
-        new org.telegram.ui.web.HttpGetBitmapTask(callback::run).execute(url);
+        org.telegram.ui.web.HttpGetBitmapTask task = new org.telegram.ui.web.HttpGetBitmapTask(callback::run);
+        task.executeOnExecutor(android.os.AsyncTask.THREAD_POOL_EXECUTOR, url);
+        return task;
     }
 
     /**
