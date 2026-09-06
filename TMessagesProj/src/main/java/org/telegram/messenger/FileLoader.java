@@ -1895,7 +1895,14 @@ public class FileLoader extends BaseController {
 
     public static boolean checkUploadFileSize(int currentAccount, long length) {
         boolean premium = AccountInstance.getInstance(currentAccount).getUserConfig().isPremium();
-        if (length < DEFAULT_MAX_FILE_SIZE || (length < DEFAULT_MAX_FILE_SIZE_PREMIUM && premium)) {
+        MessagesController messagesController = MessagesController.getInstance(currentAccount);
+        long maxSize = messagesController.uploadMaxFileParts > 0
+                ? messagesController.uploadMaxFileParts * 512L * 1024L
+                : DEFAULT_MAX_FILE_SIZE;
+        long maxSizePremium = messagesController.uploadMaxFilePartsPremium > 0
+                ? messagesController.uploadMaxFilePartsPremium * 512L * 1024L
+                : DEFAULT_MAX_FILE_SIZE_PREMIUM;
+        if (length < maxSize || (length < maxSizePremium && premium)) {
             return true;
         }
         return false;

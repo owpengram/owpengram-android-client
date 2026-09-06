@@ -39,7 +39,6 @@ import androidx.core.math.MathUtils;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
-import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
 import org.telegram.tgnet.tl.TL_stars;
 import org.telegram.tgnet.tl.TL_stories;
@@ -579,13 +578,19 @@ public class LimitPreviewView extends LinearLayout {
 
     public void setType(int type) {
         if (type == LimitReachedBottomSheet.TYPE_LARGE_FILE) {
+            // premiumLimit already carries the real ceiling in MB (see
+            // LimitReachedBottomSheet's TYPE_LARGE_FILE setup, which reads
+            // MessagesController's uploadMaxFileParts/_Premium -- itself the
+            // server's own configured per-file cap, not always the stock
+            // 2/4 GB this used to hardcode regardless of server config).
+            String limitSizeText = AndroidUtilities.formatFileSize(premiumLimit * 1024L * 1024L, true, true);
             if (limitIcon != null) {
                 SpannableStringBuilder spannableStringBuilder = new SpannableStringBuilder();
                 spannableStringBuilder.append("d ").setSpan(new ColoredImageSpan(icon), 0, 1, 0);
-                spannableStringBuilder.append(UserConfig.getInstance(UserConfig.selectedAccount).isPremium() ? "4 GB" : "2 GB");
+                spannableStringBuilder.append(limitSizeText);
                 limitIcon.setText(spannableStringBuilder, false);
             }
-            premiumCount.setText("4 GB");
+            premiumCount.setText(limitSizeText);
         } else if (type == LimitReachedBottomSheet.TYPE_ADD_MEMBERS_RESTRICTED) {
             if (limitIcon != null) {
                 SpannableStringBuilder spannableStringBuilder = new SpannableStringBuilder();

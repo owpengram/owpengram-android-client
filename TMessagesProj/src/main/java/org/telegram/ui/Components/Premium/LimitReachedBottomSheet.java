@@ -1993,7 +1993,7 @@ public class LimitReachedBottomSheet extends BottomSheetWithRecyclerListView imp
                         if (UserConfig.getInstance(currentAccount).isPremium() || isVeryLargeFile) {
                             limitPreviewView.premiumCount.setVisibility(View.GONE);
                             if (type == TYPE_LARGE_FILE) {
-                                limitPreviewView.defaultCount.setText("2 GB");
+                                limitPreviewView.defaultCount.setText(AndroidUtilities.formatFileSize(defaultLimit * 1024L * 1024L, true, true));
                             } else {
                                 limitPreviewView.defaultCount.setText(Integer.toString(defaultLimit));
                             }
@@ -2444,12 +2444,24 @@ public class LimitReachedBottomSheet extends BottomSheetWithRecyclerListView imp
             limitParams.descriptionStrPremium = LocaleController.formatString("LimitReachedCommunitiesPremium", R.string.LimitReachedCommunitiesPremium, limitParams.premiumLimit);
             limitParams.descriptionStrLocked = LocaleController.formatString("LimitReachedCommunitiesLocked", R.string.LimitReachedCommunitiesLocked, limitParams.defaultLimit);
         } else if (type == TYPE_LARGE_FILE) {
-            limitParams.defaultLimit = 100;
-            limitParams.premiumLimit = 200;
+            MessagesController fileSizeController = MessagesController.getInstance(currentAccount);
+            int defaultParts = fileSizeController.uploadMaxFileParts > 0 ? fileSizeController.uploadMaxFileParts : 4000;
+            int premiumParts = fileSizeController.uploadMaxFilePartsPremium > 0 ? fileSizeController.uploadMaxFilePartsPremium : 8000;
+            long defaultBytes = defaultParts * 512L * 1024L;
+            long premiumBytes = premiumParts * 512L * 1024L;
+            String defaultSizeStr = AndroidUtilities.formatFileSize(defaultBytes, true, true);
+            String premiumSizeStr = AndroidUtilities.formatFileSize(premiumBytes, true, true);
+            // defaultLimit/premiumLimit only drive this sheet's slider position
+            // (a plain ratio, see percent/position math below) -- MB counts
+            // work as well as the previous hardcoded 100/200 placeholders,
+            // and now scale with a self-hosted server's own configured
+            // per-file ceiling instead of always claiming a stock 2/4 GB.
+            limitParams.defaultLimit = (int) Math.max(1, defaultBytes / (1024L * 1024L));
+            limitParams.premiumLimit = (int) Math.max(limitParams.defaultLimit + 1, premiumBytes / (1024L * 1024L));
             limitParams.icon = R.drawable.msg_limit_folder;
-            limitParams.descriptionStr = LocaleController.formatString("LimitReachedFileSize", R.string.LimitReachedFileSize, "2 GB", "4 GB");
-            limitParams.descriptionStrPremium = LocaleController.formatString("LimitReachedFileSizePremium", R.string.LimitReachedFileSizePremium, "4 GB");
-            limitParams.descriptionStrLocked = LocaleController.formatString("LimitReachedFileSizeLocked", R.string.LimitReachedFileSizeLocked, "2 GB");
+            limitParams.descriptionStr = LocaleController.formatString("LimitReachedFileSize", R.string.LimitReachedFileSize, defaultSizeStr, premiumSizeStr);
+            limitParams.descriptionStrPremium = LocaleController.formatString("LimitReachedFileSizePremium", R.string.LimitReachedFileSizePremium, premiumSizeStr);
+            limitParams.descriptionStrLocked = LocaleController.formatString("LimitReachedFileSizeLocked", R.string.LimitReachedFileSizeLocked, defaultSizeStr);
         } else if (type == TYPE_ACCOUNTS) {
             limitParams.defaultLimit = 3;
             limitParams.premiumLimit = 4;

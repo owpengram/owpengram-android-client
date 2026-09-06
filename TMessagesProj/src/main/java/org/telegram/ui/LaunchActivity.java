@@ -7888,8 +7888,31 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         } else if (id == NotificationCenter.currentUserShowLimitReachedDialog) {
             if (!mainFragmentsStack.isEmpty()) {
                 BaseFragment fragment = mainFragmentsStack.get(mainFragmentsStack.size() - 1);
+                int limitType = (int) args[0];
+                MessagesController messagesController = MessagesController.getInstance(currentAccount);
+                boolean flatFileSizeLimit = limitType == LimitReachedBottomSheet.TYPE_LARGE_FILE
+                        && messagesController.uploadMaxFileParts > 0
+                        && messagesController.uploadMaxFileParts == messagesController.uploadMaxFilePartsPremium;
                 if (fragment.getParentActivity() != null) {
-                    fragment.showDialog(new LimitReachedBottomSheet(fragment, fragment.getParentActivity(), (int) args[0], currentAccount, null));
+                    if (flatFileSizeLimit) {
+                        // A self-hosted server can configure the SAME per-file
+                        // ceiling for premium and non-premium accounts (unlike
+                        // stock Telegram, where premium always doubles it) --
+                        // LimitReachedBottomSheet's Free/Premium comparison bar
+                        // is misleading in that case (it implies upgrading buys
+                        // more space when it buys nothing), so fall back to a
+                        // plain dialog with the same already-accurate wording
+                        // instead of the graphic tier comparison.
+                        String sizeText = AndroidUtilities.formatFileSize(
+                                messagesController.uploadMaxFilePartsPremium * 512L * 1024L, true, true);
+                        AlertDialog.Builder builder = new AlertDialog.Builder(fragment.getParentActivity());
+                        builder.setTitle(LocaleController.getString(R.string.FileTooLarge));
+                        builder.setMessage(AndroidUtilities.replaceTags(LocaleController.formatString("LimitReachedFileSizePremium", R.string.LimitReachedFileSizePremium, sizeText)));
+                        builder.setPositiveButton(LocaleController.getString(R.string.OK), null);
+                        fragment.showDialog(builder.create());
+                    } else {
+                        fragment.showDialog(new LimitReachedBottomSheet(fragment, fragment.getParentActivity(), limitType, currentAccount, null));
+                    }
                 }
             }
         } else if (id == NotificationCenter.currentUserPremiumStatusChanged) {
