@@ -60,11 +60,19 @@ android {
     }
 
     buildTypes {
+        // No applicationIdSuffix here (unlike upstream Telegram-Android's
+        // own AppStandalone, which keeps ".web" so its Play and
+        // direct-download builds can coexist as separate installs): this
+        // fork only ever
+        // wants ONE installed app per device, sharing the same
+        // applicationId as :TMessagesProj_App (same keystore too -- see
+        // signingConfigs above), so switching a device from the Play build
+        // to this unrestricted one is a plain in-place update, not a fresh
+        // side-by-side install that starts local chat data over from zero.
         debug {
             debuggable true
             jniDebuggable true
             signingConfig signingConfigs.debug
-            applicationIdSuffix ".web"
             minifyEnabled false
             multiDexEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro', '../TMessagesProj/proguard-rules-beta.pro'
@@ -74,7 +82,6 @@ android {
             debuggable false
             jniDebuggable false
             signingConfig signingConfigs.release
-            applicationIdSuffix ".web"
             minifyEnabled true
             multiDexEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), '../TMessagesProj/proguard-rules.pro'
@@ -149,4 +156,11 @@ android {
     }
 }
 
-apply plugin: 'com.google.gms.google-services'
+// Прибрано, як і в TMessagesProj_App: без хмарних залежностей. Push працює
+// через keep-alive (self-hosted), білд не потребує Firebase-проєкту /
+// google-services.json. Лишаючи цей плагін увімкненим, processAfat*GoogleServices
+// падає з "No matching client found" -- google-services.json тут не має
+// запису для applicationId "com.owpengram.messenger.web" (лише
+// org.telegram.*/com.owpengram.messenger.beta), і додавати такий запис
+// вручну без доступу до Firebase-консолі неможливо/непотрібно.
+// apply plugin: 'com.google.gms.google-services'

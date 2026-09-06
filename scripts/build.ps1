@@ -155,14 +155,18 @@ try {
         $BuildType = Read-BuildType
     }
 
-    $BuildTypeCap  = (Get-Culture).TextInfo.ToTitleCase($BuildType)  # debug->Debug / release->Release
-    $GradleTask    = ":TMessagesProj_App:assembleAfat$BuildTypeCap"
-
-    if ($BuildType -eq 'release') {
-        $ApkPath = Join-Path $RepoRoot "TMessagesProj_App\build\outputs\apk\afat\release\app-afat-release.apk"
-    } else {
-        $ApkPath = Join-Path $RepoRoot "TMessagesProj_App\build\outputs\apk\afat\debug\app.apk"
-    }
+    # :TMessagesProj_App is the Google Play flavor (ApplicationLoaderImpl.isStandalone()
+    # = false) -- Play Store builds carry restrictions stock Telegram itself doesn't
+    # apply to the direct/telegram.org-style download (e.g. some bot chats refuse to
+    # open). :TMessagesProj_AppStandalone (ApplicationLoaderImpl.isStandalone() = true)
+    # is that unrestricted flavor and shares this repo's same applicationId/keystore, so
+    # it installs as an update over an existing build rather than a second app. It has no
+    # "release" build type -- its signed/optimized type is named "standalone" instead.
+    $GradleModule  = ':TMessagesProj_AppStandalone'
+    $ApkBuildTypeDir = if ($BuildType -eq 'release') { 'standalone' } else { 'debug' }
+    $BuildTypeCap  = (Get-Culture).TextInfo.ToTitleCase($ApkBuildTypeDir)  # debug->Debug / standalone->Standalone
+    $GradleTask    = "${GradleModule}:assembleAfat$BuildTypeCap"
+    $ApkPath = Join-Path $RepoRoot "TMessagesProj_AppStandalone\build\outputs\apk\afat\$ApkBuildTypeDir\app.apk"
 
     Write-Ok "Build type: $BuildType"
 
@@ -202,7 +206,7 @@ try {
     }
     else {
         Write-Host "[WARN] APK not found at: $ApkPath" -ForegroundColor Yellow
-        Write-Host "       Check folder: $(Join-Path $RepoRoot 'TMessagesProj_App\build\outputs\apk')" -ForegroundColor Yellow
+        Write-Host "       Check folder: $(Join-Path $RepoRoot 'TMessagesProj_AppStandalone\build\outputs\apk')" -ForegroundColor Yellow
     }
 }
 catch {
