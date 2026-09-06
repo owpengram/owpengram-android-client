@@ -643,7 +643,7 @@ public class ImageReceiver implements NotificationCenter.NotificationCenterDeleg
             }
             return;
         }
-        String imageKey = imageLocation != null ? imageLocation.getKey(parentObject, null, false) : null;
+        String imageKey = imageLocation != null ? imageLocation.getKey(parentObject, null, false, currentAccount) : null;
         if (imageKey == null && imageLocation != null) {
             imageLocation = null;
         }
@@ -664,7 +664,7 @@ public class ImageReceiver implements NotificationCenter.NotificationCenterDeleg
             imageKey = uniqKeyPrefix + imageKey;
         }
 
-        String mediaKey = mediaLocation != null ? mediaLocation.getKey(parentObject, null, false) : null;
+        String mediaKey = mediaLocation != null ? mediaLocation.getKey(parentObject, null, false, currentAccount) : null;
         if (mediaKey == null && mediaLocation != null) {
             mediaLocation = null;
         }
@@ -695,7 +695,7 @@ public class ImageReceiver implements NotificationCenter.NotificationCenterDeleg
             strippedLoc = thumbLocation;
         }
 
-        String thumbKey = thumbLocation != null ? thumbLocation.getKey(parentObject, strippedLoc, false) : null;
+        String thumbKey = thumbLocation != null ? thumbLocation.getKey(parentObject, strippedLoc, false, currentAccount) : null;
         if (thumbKey != null && thumbFilter != null) {
             thumbKey += "@" + thumbFilter;
         }

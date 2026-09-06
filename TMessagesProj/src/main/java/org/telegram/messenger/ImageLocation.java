@@ -1,5 +1,6 @@
 package org.telegram.messenger;
 
+import org.telegram.owpengram.OwpengramServers;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.Theme;
@@ -458,6 +459,21 @@ public class ImageLocation {
     }
 
     public String getKey(Object parentObject, Object fullObject, boolean url) {
+        return getKey(parentObject, fullObject, url, -1);
+    }
+
+    /**
+     * OwpengramServers: scope the avatar/photo cache key per backend server. Unlike documents
+     * (dc_id + id) or secure files (dc_id + id), a plain TLRPC.FileLocation (what user/chat photos
+     * use, TL_fileLocationToBeDeprecated) carries only volume_id + local_id -- no dc_id, no secret.
+     * Two independent self-hosted servers that both hand out low sequential ids (e.g. each
+     * server's very first ever uploaded photo) can produce an IDENTICAL key. This key is both the
+     * in-memory LRU cache key AND the on-disk cache filename (see ImageLoader's
+     * createLoadOperationForImageReceiver), so without scoping, an account on server B would
+     * silently render server A's cached avatar bytes for a colliding id. currentAccount < 0 (no
+     * account context available at the call site) keeps the original unscoped key, unchanged.
+     */
+    public String getKey(Object parentObject, Object fullObject, boolean url, int currentAccount) {
         if (secureDocument != null) {
             return secureDocument.secureFile.dc_id + "_" + secureDocument.secureFile.id;
         } else if (photoSize instanceof TLRPC.TL_photoStrippedSize || photoSize instanceof TLRPC.TL_photoPathSize) {
@@ -465,7 +481,18 @@ public class ImageLocation {
                 return getStrippedKey(parentObject, fullObject == null ? this : fullObject, photoSize);
             }
         } else if (location != null) {
-            return location.volume_id + "_" + location.local_id;
+            String key = location.volume_id + "_" + location.local_id;
+            if (currentAccount >= 0) {
+                try {
+                    String scope = OwpengramServers.serverScopeKeyForAccount(currentAccount);
+                    if (!scope.isEmpty()) {
+                        key += "_s" + Integer.toHexString(scope.hashCode());
+                    }
+                } catch (Exception e) {
+                    FileLog.e(e);
+                }
+            }
+            return key;
         } else if (webFile != null) {
             return Utilities.MD5(webFile.url);
         } else if (instantFile != null) {
