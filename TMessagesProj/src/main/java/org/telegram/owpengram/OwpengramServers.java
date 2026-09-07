@@ -17,8 +17,10 @@ import org.telegram.tgnet.ConnectionsManager;
 
 import org.telegram.messenger.AndroidUtilities;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -29,6 +31,11 @@ public class OwpengramServers {
     private static final String PREFS_NAME = "owpengram_servers";
     private static final String KEY_CUSTOM_SERVERS = "custom_servers";
     private static final String KEY_ACCOUNT_SERVER = "account_server_";
+    // Built-in servers are rebuilt from compile-time constants by
+    // owpengramServer()/telegramServer(), so unlike custom ones they have no
+    // KEY_CUSTOM_SERVERS entry to write a refreshed name/description/logo
+    // back into. This holds those cosmetic overrides, keyed by server id.
+    private static final String KEY_BUILTIN_IDENTITY = "builtin_identity";
 
     public static final String ID_OWPENGRAM = "owpengram";
     public static final String ID_TELEGRAM  = "telegram";
@@ -96,6 +103,10 @@ public class OwpengramServers {
         s.mainDcId           = 1;
         s.rsaPublicKey       = OWPENGRAM_RSA_KEY;
         s.rsaKeyFingerprint  = OWPENGRAM_RSA_FINGERPRINT;
+        // Whatever the operator has since set on the server itself wins over
+        // the shipped defaults -- see refreshServersInfo(). Only name,
+        // description and logo: host/port/key above stay compiled-in.
+        applyBuiltinIdentity(s);
         return s;
     }
 
@@ -645,5 +656,329 @@ public class OwpengramServers {
             return null;
         }
         return file.getAbsolutePath();
+    }
+
+    // --- Live server identity (name / description / icon) ---
+
+    // Plain statics rather than atomics: fetchServerInfo/fetchServerIcon both
+    // answer on the UI thread (AsyncTask#onPostExecute), so every read and
+    // write below happens there too.
+    private static boolean refreshRunning = false;
+    private static int refreshRemaining = 0;
+
+    /**
+     * Re-reads the admin-edited identity (name/description/icon) of every
+     * server that serves /owpengram/server-info and stores it, so a logo or
+     * title the operator changed shows up without the user having to open
+     * Edit Server and re-fetch by hand. Call it when a server list becomes
+     * visible.
+     *
+     * Deliberately cosmetic-only: host, port, RSA key, DC id and id are NEVER
+     * touched by this. That endpoint is plain HTTP, so anything able to MITM
+     * it could otherwise redirect the connection or swap the key the
+     * handshake is verified against; a wrong name or icon is merely wrong,
+     * not dangerous.
+     *
+     * The Telegram server is skipped -- it is not an OwpenGram backend and
+     * has no such endpoint. Fire-and-forget: one round at a time, and any
+     * failure silently keeps the stored values.
+     */
+    public static void refreshServersInfo() {
+        if (refreshRunning) {
+            return;
+        }
+        List<OwpengramServer> targets = new ArrayList<>();
+        for (OwpengramServer s : listServers()) {
+            if (s.isTelegram || TextUtils.isEmpty(s.host) || s.port <= 0) {
+                continue;
+            }
+            targets.add(s);
+        }
+        if (targets.isEmpty()) {
+            return;
+        }
+        refreshRunning = true;
+        refreshRemaining = targets.size();
+        for (OwpengramServer target : targets) {
+            final OwpengramServer server = target;
+            fetchServerInfo(server.host, server.port, result -> {
+                if (result == null) {
+                    refreshFinished();
+                    return;
+                }
+                // result.rsaPublicKeyPem and result.dcId are deliberately
+                // ignored -- see the security note above.
+                final String name = result.name;
+                final String description = result.description;
+                if (!result.hasIcon) {
+                    // Explicit "no icon" -- clears one previously fetched from
+                    // this server, so deleting it there deletes it here.
+                    applyFetchedIdentity(server, name, description, null, false);
+                    refreshFinished();
+                    return;
+                }
+                fetchServerIcon(server.host, server.port, bitmap -> {
+                    // hasIcon stays true even when the download failed and the
+                    // path is null: the server does have an icon, this round
+                    // just did not get it, so keep the stored one.
+                    applyFetchedIdentity(
+                            server,
+                            name,
+                            description,
+                            saveFetchedIconStable(server.id, bitmap),
+                            true);
+                    refreshFinished();
+                });
+            });
+        }
+    }
+
+    // Decremented on every outcome including failure, so one unreachable
+    // server can't wedge the flag and block all later refreshes.
+    private static void refreshFinished() {
+        if (--refreshRemaining <= 0) {
+            refreshRunning = false;
+        }
+    }
+
+    /**
+     * Stores the cosmetic fields a server just reported about itself. An
+     * empty name/description/logoPath means the operator has not set that
+     * field, so the existing value is kept rather than blanked.
+     *
+     * Returns without writing when nothing actually differs. That is load
+     * bearing, not an optimisation: writing notifies the custom-servers
+     * listeners and the visible list rebuilds on that, so an unconditional
+     * write would repaint the screen on every single refresh.
+     */
+    private static void applyFetchedIdentity(
+            OwpengramServer server,
+            String name,
+            String description,
+            String logoPath,
+            boolean hasIcon) {
+        String supersededLogo = null;
+        boolean changed = false;
+
+        if (server.isOfficial) {
+            JSONObject stored = readBuiltinIdentityRoot().optJSONObject(server.id);
+            String currentName = stored != null ? stored.optString("name", "") : "";
+            String currentDescription = stored != null ? stored.optString("description", "") : "";
+            String currentLogo = stored != null ? stored.optString("logoPath", "") : "";
+            String nextName = currentName;
+            String nextDescription = currentDescription;
+            String nextLogo = currentLogo;
+            if (!TextUtils.isEmpty(name) && !name.equals(currentName)) {
+                nextName = name;
+                changed = true;
+            }
+            if (!TextUtils.isEmpty(description) && !description.equals(currentDescription)) {
+                nextDescription = description;
+                changed = true;
+            }
+            if (!TextUtils.isEmpty(logoPath)) {
+                if (!logoPath.equals(currentLogo)) {
+                    nextLogo = logoPath;
+                    changed = true;
+                }
+            } else if (!hasIcon && isFetchedServerLogo(server.id, currentLogo)) {
+                // Emptied here means the key is dropped on write, so
+                // owpengramServer() falls back to its compiled-in logo.
+                // Gated on !hasIcon because an empty path also happens when
+                // the server HAS an icon but this round failed to fetch it.
+                nextLogo = "";
+                changed = true;
+            }
+            if (!changed) {
+                return;
+            }
+            // Only when the stored path actually moved: a round that changed
+            // just the name, while an icon fetch happened to fail, must not
+            // delete the logo file the entry still points at.
+            if (!TextUtils.equals(nextLogo, currentLogo)) {
+                supersededLogo = currentLogo;
+            }
+            writeBuiltinIdentity(server.id, nextName, nextDescription, nextLogo);
+            AndroidUtilities.runOnUIThread(() -> {
+                for (Runnable listener : customServersChangedListeners) {
+                    listener.run();
+                }
+            });
+        } else {
+            if (!TextUtils.isEmpty(name) && !name.equals(server.name)) {
+                server.name = name;
+                changed = true;
+            }
+            if (!TextUtils.isEmpty(description) && !description.equals(server.description)) {
+                server.description = description;
+                changed = true;
+            }
+            if (!TextUtils.isEmpty(logoPath)) {
+                if (!logoPath.equals(server.logoPath)) {
+                    supersededLogo = server.logoPath;
+                    server.logoPath = logoPath;
+                    changed = true;
+                }
+            } else if (!hasIcon && isFetchedServerLogo(server.id, server.logoPath)) {
+                // Cleared rather than left stale, so the row falls back to the
+                // coloured letter avatar like a server that never had a logo.
+                // Gated on !hasIcon because an empty path also happens when
+                // the server HAS an icon but this round failed to fetch it.
+                supersededLogo = server.logoPath;
+                server.logoPath = "";
+                changed = true;
+            }
+            if (!changed) {
+                return;
+            }
+            // Only the three fields above were touched; host/port/RSA/id ride
+            // along unchanged from the same stored object. Notifies listeners.
+            updateCustomServer(server);
+        }
+
+        // Set only where the stored path actually changed above, so this can
+        // never delete a file an entry still points at. deleteServerLogoFile
+        // additionally refuses anything outside our own logos directory.
+        if (!TextUtils.isEmpty(supersededLogo)) {
+            deleteServerLogoFile(supersededLogo);
+        }
+    }
+
+    /**
+     * True only for files saveFetchedIconStable() wrote, which it names
+     * "&lt;serverId&gt;_&lt;digest&gt;.png".
+     *
+     * Note this deliberately does NOT match saveFetchedIcon's
+     * "fetched_&lt;timestamp&gt;.png": AddServerFragment stores BOTH a manually
+     * picked icon and an auto-fetched one under that name, so they cannot be
+     * told apart, and clearing them could throw away an image the user chose
+     * from their gallery. Consequence: a logo captured when the server was
+     * added is replaced, but not cleared, until one refresh has written a
+     * digest-named file over it.
+     */
+    private static boolean isFetchedServerLogo(String serverId, String logoPath) {
+        if (TextUtils.isEmpty(serverId) || TextUtils.isEmpty(logoPath)) {
+            return false;
+        }
+        try {
+            File dir = new File(ApplicationLoader.applicationContext.getFilesDir(), SERVER_LOGOS_DIR);
+            File file = new File(logoPath);
+            return dir.equals(file.getParentFile())
+                    && file.getName().startsWith(serverId + "_");
+        } catch (Exception e) {
+            FileLog.e(e);
+            return false;
+        }
+    }
+
+    private static JSONObject readBuiltinIdentityRoot() {
+        try {
+            return new JSONObject(getPrefs().getString(KEY_BUILTIN_IDENTITY, "{}"));
+        } catch (Exception e) {
+            return new JSONObject();
+        }
+    }
+
+    private static void writeBuiltinIdentity(
+            String serverId,
+            String name,
+            String description,
+            String logoPath) {
+        try {
+            JSONObject root = readBuiltinIdentityRoot();
+            JSONObject object = new JSONObject();
+            if (!TextUtils.isEmpty(name)) {
+                object.put("name", name);
+            }
+            if (!TextUtils.isEmpty(description)) {
+                object.put("description", description);
+            }
+            if (!TextUtils.isEmpty(logoPath)) {
+                object.put("logoPath", logoPath);
+            }
+            root.put(serverId, object);
+            getPrefs().edit().putString(KEY_BUILTIN_IDENTITY, root.toString()).apply();
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+    }
+
+    // Overlays the stored identity onto a freshly built built-in server.
+    // Empty/missing fields leave the compiled-in defaults in place.
+    static void applyBuiltinIdentity(OwpengramServer s) {
+        JSONObject object = readBuiltinIdentityRoot().optJSONObject(s.id);
+        if (object == null) {
+            return;
+        }
+        String name = object.optString("name", "");
+        String description = object.optString("description", "");
+        String logoPath = object.optString("logoPath", "");
+        if (!TextUtils.isEmpty(name)) {
+            s.name = name;
+        }
+        if (!TextUtils.isEmpty(description)) {
+            s.description = description;
+        }
+        if (!TextUtils.isEmpty(logoPath)) {
+            s.logoPath = logoPath;
+        }
+    }
+
+    /**
+     * Like saveFetchedIcon, but the file name carries a digest of the encoded
+     * bytes instead of a timestamp. Two things depend on that: an unchanged
+     * icon resolves to the same path, so a refresh sees "nothing changed" and
+     * skips the write entirely; and a changed icon lands on a NEW path, which
+     * the previous one's image cache entry cannot be mistaken for -- that is
+     * exactly how a stale logo survives a refresh.
+     */
+    private static String saveFetchedIconStable(String serverId, Bitmap bitmap) {
+        if (bitmap == null) {
+            return null;
+        }
+        try {
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, buffer);
+            byte[] bytes = buffer.toByteArray();
+            byte[] hash = MessageDigest.getInstance("MD5").digest(bytes);
+            final char[] hex = "0123456789abcdef".toCharArray();
+            StringBuilder digest = new StringBuilder();
+            for (int i = 0; i < 4; i++) {
+                int value = hash[i] & 0xFF;
+                digest.append(hex[value >>> 4]).append(hex[value & 0x0F]);
+            }
+            File dir = new File(ApplicationLoader.applicationContext.getFilesDir(), SERVER_LOGOS_DIR);
+            if (!dir.exists() && !dir.mkdirs()) {
+                FileLog.e("OwpengramServers: failed to create " + dir);
+                return null;
+            }
+            File file = new File(dir, serverId + "_" + digest + ".png");
+            if (!file.exists()) {
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    out.write(bytes);
+                }
+            }
+            return file.getAbsolutePath();
+        } catch (Exception e) {
+            FileLog.e(e);
+            return null;
+        }
+    }
+
+    // Only ever deletes inside our own logos directory, so a server pointed
+    // at a user-picked image elsewhere on disk is left alone.
+    private static void deleteServerLogoFile(String path) {
+        if (TextUtils.isEmpty(path)) {
+            return;
+        }
+        try {
+            File dir = new File(ApplicationLoader.applicationContext.getFilesDir(), SERVER_LOGOS_DIR);
+            File file = new File(path);
+            if (dir.equals(file.getParentFile()) && file.exists()) {
+                file.delete();
+            }
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
     }
 }

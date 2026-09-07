@@ -112,6 +112,17 @@ public class ServerSelectFragment extends BaseFragment {
         reloadServers();
         pingAll();
         OwpengramServers.addCustomServersChangedListener(customServersChangedListener);
+        // Pull each server's current name/description/icon. Without this the
+        // list keeps showing whatever identity was captured when the server
+        // was added, so an operator changing the logo or title only reached
+        // users who happened to open Edit Server and re-fetch by hand.
+        //
+        // Fire-and-forget: anything that actually changed is stored and
+        // notifies customServersChangedListener above, so the rows update
+        // themselves once the replies land. Nothing changed means no
+        // notification and no rebuild -- which is also why this is called
+        // here and never from reloadServers().
+        OwpengramServers.refreshServersInfo();
         return true;
     }
 
