@@ -1,0 +1,8 @@
+# Runtime asset data is parsed byte-wise and must never be line-ending converted.
+#
+# With core.autocrlf=true git rewrites these on checkout with CRLF. Theme files are
+# split on '\n', so every value keeps a trailing '\r' and Utilities.parseInt() throws
+# on it. The exception is swallowed, so every colour silently becomes 0: backgrounds
+# get OR'ed to opaque black and all text becomes fully transparent -> black, textless UI.
+*.attheme -text
+TMessagesProj/src/main/assets/** -text

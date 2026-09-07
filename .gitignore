@@ -20,3 +20,4 @@ TMessagesProj_AppHuawei/afat/
 # signing key (never commit the private keystore / its password)
 TMessagesProj/config/release.keystore
 TMessagesProj/config/.keystore_password.txt
+TMessagesProj/jni/ffmpeg/build_android

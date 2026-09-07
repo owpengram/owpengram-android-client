@@ -13,7 +13,7 @@ to use, and free from lock-in.
 
 > 🤖 **Available now for Android.** iOS and a web client are planned.
 
-> 🔗 Built on **MTProto API layer 225**.
+> 🔗 Built on **MTProto API layer 229**.
 
 <p align="center">
   <img src="media/readme/android_hero.png" alt="OwpenGram for Android — chats and calls" width="820">
