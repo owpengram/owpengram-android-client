@@ -13,7 +13,8 @@ to use, and free from lock-in.
 
 > 🤖 **Available now for Android** — grab the APK from the
 > [Releases](https://github.com/owpengram/owpengram-android-client/releases)
-> tab. iOS and a web client are planned.
+> tab. The web client is live at [web.owpengram.org](https://web.owpengram.org);
+> iOS is planned.
 
 > 🔗 Built on **MTProto API layer 229**, on top of Telegram for Android `v12.10.1`.
 
@@ -37,6 +38,16 @@ delivered by the client's own keep-alive connection instead of a cloud service.
 It shares its application id and signature with the Play build, so installing it
 over an existing OwpenGram is an in-place update — your chats stay where they
 are.
+
+## 🔄 Updates
+
+The app checks the project's GitHub releases on start (and from **Settings**
+→ check for updates). When a newer release is published it shows the usual
+update window with the release notes, and its button opens the APK for
+download — Android does not let an app replace itself silently, so the final
+install is yours. The check asks GitHub directly, so it works the same
+whichever server the active account lives on. Local builds with release number
+`0` never check.
 
 ## 🚀 Try it without setting up anything
 
@@ -127,6 +138,12 @@ build, and remembers your answers in `.owpengram-build.local.json` (gitignored).
 It builds the `:TMessagesProj_AppStandalone` flavour — the unrestricted,
 Firebase-free one that ships in Releases.
 
+The script also asks for the **release number** of the build — the N in the
+GitHub tag `ON` (for example `8` for `O8`). The in-app updater offers any
+published release with a higher number. Leave it blank (or `0`) for a local
+build that never checks for updates. For scripted builds set the
+`OWPENGRAM_BUILD` environment variable and the question is skipped.
+
 **Requirements:** JDK 17+, Android SDK (compile/target API 36, build-tools
 36.0.0, NDK 27.2.12479018), Git. Minimum supported device API is 21
 (Android 5.0).
@@ -135,7 +152,9 @@ Firebase-free one that ships in Releases.
 
 - 🚀 [Server](https://github.com/owpengram/owpengram-server)
 - 💻 [Desktop client](https://github.com/owpengram/owpengram-desktop-client)
-- 🌐 [GitHub organization](https://github.com/owpengram)
+- 🌐 [Web client](https://github.com/owpengram/owpengram-web-client)
+- 🎁 [Gift packs](https://github.com/owpengram/owpengram-giftpacks)
+- 🏢 [GitHub organization](https://github.com/owpengram)
 
 ## 💬 Community
 
