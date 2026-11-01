@@ -970,7 +970,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             }
             String versionName = pInfo.versionName;
             //APP VERSION HERE
-            versionName += "_O7";
+            versionName += "_O8";
 
             return "OwpenGram " + String.format(Locale.US, "v%s (%d)\n%s", versionName, code, abi);
         } catch (Exception e) {
