@@ -2770,6 +2770,7 @@
     <string name="AppUpdate">Update OwpenGram</string>
     <string name="AppUpdateBeta">Update OwpenGram Beta</string>
     <string name="AppUpdateVersionAndSize">Version %1$s • %2$s</string>
+    <string name="AppUpdateVersionOnly">Version %1$s</string>
     <string name="AppBetaUpdateVersion">Version %1$s (%2$s)</string>
     <string name="AppUpdateDownloading">Downloading %1$d%%...</string>
     <string name="AppUpdateNow">Update Now</string>

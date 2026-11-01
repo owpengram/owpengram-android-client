@@ -137,6 +137,7 @@ import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.SharedPrefsHelper;
 import org.telegram.messenger.TopicsController;
 import org.telegram.messenger.UserConfig;
+import org.telegram.owpengram.OwpengramUpdater;
 import org.telegram.messenger.UserObject;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.browser.Browser;
@@ -6193,6 +6194,27 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             return;
         }
         if (!force && !BuildVars.CHECK_UPDATES) {
+            return;
+        }
+        if (OwpengramUpdater.enabled()) {
+            // Releases come from GitHub, like the desktop client's: help.getAppUpdate would go to
+            // the active account's server, and for a Telegram account that is Telegram itself.
+            if (progress != null) {
+                progress.init();
+            }
+            OwpengramUpdater.check(force, (update, failed) -> {
+                if (progress != null) {
+                    progress.end();
+                }
+                if (update != null) {
+                    ApplicationLoader.applicationLoaderInstance.showUpdateAppPopup(LaunchActivity.this, update, currentAccount);
+                } else if (progress != null) {
+                    BaseFragment fragment = getLastFragment();
+                    if (fragment != null) {
+                        BulletinFactory.of(fragment).createSimpleBulletin(R.raw.chats_infotip, LocaleController.getString(failed ? R.string.UnknownError : R.string.YourVersionIsLatest)).show();
+                    }
+                }
+            });
             return;
         }
         if (ApplicationLoader.applicationLoaderInstance.isCustomUpdate()) {

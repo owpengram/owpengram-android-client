@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 param(
     [ValidateSet('debug','release')]
     [string]$BuildType = ''
@@ -66,6 +66,89 @@ function Patch-Api([string]$ApiId, [string]$ApiHash) {
     $content = [regex]::Replace($content, 'public static String APP_HASH = "[^"]*";', "public static String APP_HASH = `"$ApiHash`";")
     [System.IO.File]::WriteAllText($BuildVarsFile, $content, (New-Object System.Text.UTF8Encoding $false))
     Write-Ok "API patched (id $ApiId)"
+}
+
+function Get-JavaMajorVersion {
+    param([string]$JavaExe)
+    if ([string]::IsNullOrWhiteSpace($JavaExe)) { return $null }
+    if (-not (Test-Path -LiteralPath $JavaExe)) { return $null }
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = (& $JavaExe -version 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    }
+    finally {
+        $ErrorActionPreference = $prev
+    }
+    # Java 8 prints "1.8.0_…"; Java 9+ prints "17.0.…" — match the 1.x form first.
+    if ($output -match 'version "1\.(\d+)') { return [int]$Matches[1] }
+    if ($output -match 'version "(\d+)') { return [int]$Matches[1] }
+    return $null
+}
+
+function Find-Jdk17Home {
+    $candidates = [System.Collections.Generic.List[string]]::new()
+    if (-not [string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
+        $candidates.Add($env:JAVA_HOME)
+    }
+    foreach ($path in @(
+        'C:\Program Files\Eclipse Adoptium\jdk-17.0.6.10-hotspot',
+        'C:\Program Files\Android\Android Studio\jbr'
+    )) {
+        $candidates.Add($path)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+        $candidates.Add((Join-Path $env:LOCALAPPDATA 'Programs\Android\Android Studio\jbr'))
+    }
+    foreach ($glob in @(
+        'C:\Program Files\Eclipse Adoptium\jdk-17*',
+        'C:\Program Files\Java\jdk-17*',
+        'C:\Program Files\Microsoft\jdk-17*'
+    )) {
+        foreach ($hit in @(Get-Item -Path $glob -ErrorAction SilentlyContinue)) {
+            if ($hit -and $hit.FullName) { $candidates.Add($hit.FullName) }
+        }
+    }
+
+    foreach ($jdkDir in $candidates) {
+        if ([string]::IsNullOrWhiteSpace($jdkDir)) { continue }
+        $javaExe = Join-Path $jdkDir 'bin\java.exe'
+        $major = Get-JavaMajorVersion -JavaExe $javaExe
+        if ($major -ge 17) { return $jdkDir }
+    }
+    return $null
+}
+
+function Ensure-Java17 {
+    $currentMajor = $null
+    if (-not [string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
+        $currentMajor = Get-JavaMajorVersion -JavaExe (Join-Path $env:JAVA_HOME 'bin\java.exe')
+    }
+    if (-not $currentMajor) {
+        $javaCmd = Get-Command java -ErrorAction SilentlyContinue
+        if ($javaCmd -and $javaCmd.Source) {
+            $currentMajor = Get-JavaMajorVersion -JavaExe $javaCmd.Source
+        }
+    }
+    if ($currentMajor -ge 17) {
+        if ($env:JAVA_HOME) {
+            Write-Ok "JAVA_HOME: $env:JAVA_HOME (JDK $currentMajor)"
+        }
+        else {
+            Write-Ok "java: JDK $currentMajor"
+        }
+        return
+    }
+
+    $jdkHome = Find-Jdk17Home
+    if ([string]::IsNullOrWhiteSpace($jdkHome)) {
+        throw "JDK 17+ required (found: $(if ($currentMajor) { $currentMajor } else { 'none' })). Install Temurin/Oracle JDK 17 and set JAVA_HOME."
+    }
+
+    $env:JAVA_HOME = $jdkHome
+    $env:Path = "$(Join-Path $jdkHome 'bin');$env:Path"
+    $switched = Get-JavaMajorVersion -JavaExe (Join-Path $jdkHome 'bin\java.exe')
+    Write-Ok "JAVA_HOME switched to JDK $switched : $jdkHome"
 }
 
 function Find-AndroidSdk {
@@ -178,6 +261,7 @@ try {
     # --- Tools check ---
     Write-Step 'Check tools'
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'Missing git in PATH' }
+    Ensure-Java17
     if (-not (Get-Command java -ErrorAction SilentlyContinue)) { throw 'Missing java in PATH (JDK 17+)' }
     if (-not (Test-Path $GradlewBat)) { throw "Missing: $GradlewBat" }
 

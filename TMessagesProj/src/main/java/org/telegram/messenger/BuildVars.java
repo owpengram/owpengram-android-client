@@ -25,6 +25,7 @@ public class BuildVars {
     public static boolean CHECK_UPDATES = true;
     public static boolean NO_SCOPED_STORAGE = Build.VERSION.SDK_INT <= 29;
     public static String BUILD_VERSION_STRING = BuildConfig.BUILD_VERSION_STRING;
+    public static int OWPENGRAM_BUILD = BuildConfig.OWPENGRAM_BUILD;
 
     public static int APP_ID = 3893395;
     public static String APP_HASH = "e2adbe11ee0f092ced6043c4e051fdda";
