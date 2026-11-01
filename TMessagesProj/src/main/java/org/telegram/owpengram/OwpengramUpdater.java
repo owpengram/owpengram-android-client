@@ -30,7 +30,8 @@ import java.util.regex.Pattern;
  * is Telegram itself, which would offer its own app instead of ours.
  *
  * Releases are tagged O1, O2, ...; the running build knows its own number
- * (OWPENGRAM_BUILD in gradle.properties, bumped for every release).
+ * (OWPENGRAM_BUILD, given to the build script for every release; 0 = a local
+ * dev build, which never checks).
  */
 public final class OwpengramUpdater {
 
@@ -181,7 +182,8 @@ public final class OwpengramUpdater {
 
         final TLRPC.TL_help_appUpdate update = new TLRPC.TL_help_appUpdate();
         update.id = build;
-        update.version = tag;
+        // shown as "Version O8" in the dialog: built from the release number, not copied from the tag text
+        update.version = "O" + build;
         update.text = notes(release.optString("body", ""));
         update.url = url;
         update.flags |= 4; // url

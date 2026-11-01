@@ -253,6 +253,34 @@ try {
 
     Write-Ok "Build type: $BuildType"
 
+    # OWPENGRAM_BUILD is the release number this build ships under -- the N in
+    # GitHub tag "ON". The in-app updater offers any published release with a
+    # higher number and shows it as "ON". Same rule as the desktop client: an
+    # OWPENGRAM_BUILD environment variable skips the prompt (scripted use), and
+    # 0 means a local dev build that never checks for updates.
+    if ($env:OWPENGRAM_BUILD) {
+        $OwpengramBuild = $env:OWPENGRAM_BUILD
+        if ($OwpengramBuild -notmatch '^\d+$') { throw "OWPENGRAM_BUILD must be a whole number, got '$OwpengramBuild'" }
+    } else {
+        $OwpengramBuild = $null
+        do {
+            $answer = (Read-Host '  Release number for this build (the N in tag ON; blank = local dev build, no self-update)').Trim()
+            if ([string]::IsNullOrEmpty($answer)) { $answer = '0' }
+            if ($answer -match '^\d+$') {
+                $OwpengramBuild = $answer
+            } else {
+                Write-Host '  Enter a whole number, or leave blank for a local dev build.' -ForegroundColor Yellow
+            }
+        } while ($null -eq $OwpengramBuild)
+    }
+    if ($OwpengramBuild -eq '0') {
+        Write-Ok 'Release number: 0 (local dev build -- self-update stays off)'
+    } else {
+        Write-Ok "Release number: $OwpengramBuild (must match tag O$OwpengramBuild once this is published)"
+    }
+    # A -P project property beats gradle.properties, so nothing in the repo is edited
+    $GradleTask = "$GradleTask -POWPENGRAM_BUILD=$OwpengramBuild"
+
     # --- API credentials ---
     $api = Get-ApiCredentials
     Write-Ok "API credentials: $($api.Source) (id $($api.Id))"
