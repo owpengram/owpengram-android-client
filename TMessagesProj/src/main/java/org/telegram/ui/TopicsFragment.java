@@ -627,7 +627,7 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
         actionBar.setAddToContainer(false);
         actionBar.setCastShadows(false);
         actionBar.setClipContent(true);
-        actionBar.setOccupyStatusBar(!AndroidUtilities.isTablet() && !inPreviewMode);
+        actionBar.setOccupyStatusBar((!AndroidUtilities.isTablet() || parentLayout != null && parentLayout.isSheet()) && !inPreviewMode);
         if (inPreviewMode) {
             actionBar.setBackgroundColor(Color.TRANSPARENT);
             actionBar.setInterceptTouches(false);
@@ -869,14 +869,14 @@ public class TopicsFragment extends BaseFragment implements NotificationCenter.N
         other.setContentDescription(getString(R.string.AccDescrMoreOptions));
         other.addSubItem(toggle_id, R.drawable.msg_discussion, getString(R.string.TopicViewAsMessages));
         addMemberSubMenu = other.addSubItem(add_member_id, R.drawable.msg_addcontact, getString(R.string.AddMember));
-        boostGroupSubmenu = other.addSubItem(boost_group_id, 0, new RLottieDrawable(R.raw.boosts, "" + R.raw.boosts, AndroidUtilities.dp(24), AndroidUtilities.dp(24)), getString(R.string.BoostingBoostGroupMenu), true, false);
+        boostGroupSubmenu = other.addSubItem(boost_group_id, 0, new RLottieDrawable(R.raw.boosts, AndroidUtilities.dp(24), AndroidUtilities.dp(24)), getString(R.string.BoostingBoostGroupMenu), true, false);
         createTopicSubmenu = other.addSubItem(create_topic_id, R.drawable.msg_topic_create, getString(R.string.CreateTopic));
         reportSubmenu = other.addSubItem(report, R.drawable.msg_report, getString(R.string.ReportChat));
         deleteChatSubmenu = other.addSubItem(delete_chat_id, R.drawable.msg_leave, getString(R.string.LeaveMegaMenu), themeDelegate);
 
         avatarContainer = new ChatAvatarContainer(context, this, false, resourceProvider);
         avatarContainer.getAvatarImageView().setRoundRadius(AndroidUtilities.dp(16));
-        avatarContainer.setOccupyStatusBar(!AndroidUtilities.isTablet() && !inPreviewMode);
+        avatarContainer.setOccupyStatusBar((!AndroidUtilities.isTablet() || parentLayout != null && parentLayout.isSheet()) && !inPreviewMode);
         avatarContainer.allowDrawStories = getDialogId() < 0;
         avatarContainer.setClipChildren(false);
         actionBar.addView(avatarContainer, 0, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.TOP | Gravity.LEFT, 56, 0, 86, 0));

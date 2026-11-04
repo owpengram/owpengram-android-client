@@ -1,4 +1,4 @@
-FROM gradle:8.11.1-jdk17
+FROM gradle:8.13-jdk17
 
 ENV ANDROID_CMDLINE_TOOLS_VERSION=15859902
 ENV ANDROID_SDK_URL=https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_CMDLINE_TOOLS_VERSION}_latest.zip
@@ -36,15 +36,20 @@ RUN sdkmanager \
 CMD mkdir -p /home/source/TMessagesProj/build/outputs/apk && \
     mkdir -p /home/gradle/TMessagesProj/build/outputs/bundle && \
     mkdir -p /home/source/TMessagesProj/build/outputs/native-debug-symbols && \
-    cp -R /home/source/. /home/gradle && \
+    mkdir -p /home/source/TMessagesProj/build/outputs/mapping/TMessagesProj_App \
+             /home/source/TMessagesProj/build/outputs/mapping/TMessagesProj_AppHuawei \
+             /home/source/TMessagesProj/build/outputs/mapping/TMessagesProj_AppStandalone && \
+    tar -C /home/source \
+        --exclude=./.git --exclude=.cxx --exclude=build --exclude=.gradle --exclude=./local.properties \
+        -cf - . | tar -C /home/gradle -xf - && \
     cd /home/gradle && \
     gradle --parallel \
-        :TMessagesProj_App:bundleBundleAfat_SDK23Release \
         :TMessagesProj_App:bundleBundleAfatRelease \
         :TMessagesProj_AppStandalone:assembleAfatStandalone \
-        :TMessagesProj_App:assembleAfatRelease \
         :TMessagesProj_AppHuawei:assembleAfatRelease --stacktrace && \
-    cp -R /home/gradle/TMessagesProj_App/build/outputs/apk/. /home/source/TMessagesProj/build/outputs/apk && \
     cp -R /home/gradle/TMessagesProj_AppHuawei/build/outputs/apk/. /home/source/TMessagesProj/build/outputs/apk && \
     cp -R /home/gradle/TMessagesProj_AppStandalone/build/outputs/apk/. /home/source/TMessagesProj/build/outputs/apk && \
-    cp -R /home/gradle/TMessagesProj_App/build/outputs/bundle/. /home/source/TMessagesProj/build/outputs/bundle
+    cp -R /home/gradle/TMessagesProj_App/build/outputs/bundle/. /home/source/TMessagesProj/build/outputs/bundle && \
+    cp -R /home/gradle/TMessagesProj_App/build/outputs/mapping/. /home/source/TMessagesProj/build/outputs/mapping/TMessagesProj_App && \
+    cp -R /home/gradle/TMessagesProj_AppHuawei/build/outputs/mapping/. /home/source/TMessagesProj/build/outputs/mapping/TMessagesProj_AppHuawei && \
+    cp -R /home/gradle/TMessagesProj_AppStandalone/build/outputs/mapping/. /home/source/TMessagesProj/build/outputs/mapping/TMessagesProj_AppStandalone

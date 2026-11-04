@@ -16,7 +16,7 @@ to use, and free from lock-in.
 > tab. The web client is live at [web.owpengram.org](https://web.owpengram.org);
 > iOS is planned.
 
-> 🔗 Built on **MTProto API layer 229**, on top of Telegram for Android `v12.10.1`.
+> 🔗 Built on **MTProto API layer 232**, on top of Telegram for Android `v13.1.1`.
 
 <p align="center">
   <img src="media/readme/android_hero.png" alt="OwpenGram for Android — chats and calls" width="820">
