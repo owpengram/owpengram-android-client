@@ -30,7 +30,7 @@ The APK lives in the
 [Releases](https://github.com/owpengram/owpengram-android-client/releases) tab —
 download, allow install from your browser, open it. One universal APK covers
 all four ABIs (`armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64`), and it runs on
-**Android 5.0+**.
+**Android 6.0+**.
 
 It is the *unrestricted* build, the direct-download flavour rather than the
 Play-Store one: no Google Play restrictions, no Firebase dependency, and push
@@ -145,8 +145,8 @@ build that never checks for updates. For scripted builds set the
 `OWPENGRAM_BUILD` environment variable and the question is skipped.
 
 **Requirements:** JDK 17+, Android SDK (compile/target API 36, build-tools
-36.0.0, NDK 27.2.12479018), Git. Minimum supported device API is 21
-(Android 5.0).
+36.0.0, NDK 27.2.12479018), Git. Minimum supported device API is 23
+(Android 6.0).
 
 ## 📦 Part of the OwpenGram project
 
