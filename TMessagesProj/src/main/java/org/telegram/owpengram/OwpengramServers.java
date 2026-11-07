@@ -461,6 +461,15 @@ public class OwpengramServers {
         return -1;
     }
 
+    /** Drops a trailing :port from a host or host:port string; bracketed IPv6 literals are kept. */
+    private static String stripPort(String hostPort) {
+        if (hostPort == null || hostPort.startsWith("[")) {
+            return hostPort;
+        }
+        int colon = hostPort.indexOf(':');
+        return colon > 0 && hostPort.indexOf(':', colon + 1) < 0 ? hostPort.substring(0, colon) : hostPort;
+    }
+
     private static boolean accountOwnsHost(int accountNum, String host) {
         if (!UserConfig.getInstance(accountNum).isClientActivated()) {
             return false;
@@ -471,7 +480,10 @@ public class OwpengramServers {
         }
         MessagesController controller = MessagesController.getInstance(accountNum);
         // Primary: the host matches this account's me_url_prefix (link prefix).
-        String prefix = controller.linkPrefix;
+        // me_url_prefix may carry a port (https://host:8443/), and callers pass either
+        // Uri.getHost() (no port) or getHostAuthority() (with port): compare bare hosts.
+        String prefix = stripPort(controller.linkPrefix);
+        host = stripPort(host);
         if (prefix != null && host.equalsIgnoreCase(prefix)) {
             return true;
         }
