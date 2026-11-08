@@ -6092,7 +6092,9 @@ public class NotificationsController extends BaseController implements Notificat
                 dialog.notify_settings = new TLRPC.TL_peerNotifySettings();
             }
         } else {
-            int untilTime = ConnectionsManager.getInstance(UserConfig.selectedAccount).getCurrentTime();
+            // The chat belongs to this controller's account: count from its own
+            // server clock, not the selected account's (servers can disagree).
+            int untilTime = getConnectionsManager().getCurrentTime();
             if (setting == SETTING_MUTE_HOUR) {
                 untilTime += 60 * 60;
             } else if (setting == SETTING_MUTE_8_HOURS) {
