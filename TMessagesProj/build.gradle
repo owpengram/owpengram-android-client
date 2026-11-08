@@ -158,7 +158,7 @@ android {
             multiDexEnabled true
             ndk.debugSymbolLevel = 'FULL'
             buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
-            buildConfigField "int", "OWPENGRAM_BUILD", OWPENGRAM_BUILD
+            buildConfigField "int", "OWPENGRAM_BUILD", owpengramBuildCode(OWPENGRAM_BUILD).toString()
             buildConfigField "String", "BETA_URL", "\"" + getProps("BETA_PRIVATE_URL") + "\""
             buildConfigField "boolean", "DEBUG_VERSION", "true"
             buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
@@ -172,7 +172,7 @@ android {
             multiDexEnabled true
             ndk.debugSymbolLevel = 'FULL'
             buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
-            buildConfigField "int", "OWPENGRAM_BUILD", OWPENGRAM_BUILD
+            buildConfigField "int", "OWPENGRAM_BUILD", owpengramBuildCode(OWPENGRAM_BUILD).toString()
             buildConfigField "String", "BETA_URL", "\"" + getProps("BETA_PRIVATE_URL") + "\""
             buildConfigField "boolean", "DEBUG_VERSION", "true"
             buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
@@ -186,7 +186,7 @@ android {
             multiDexEnabled true
             ndk.debugSymbolLevel = 'FULL'
             buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
-            buildConfigField "int", "OWPENGRAM_BUILD", OWPENGRAM_BUILD
+            buildConfigField "int", "OWPENGRAM_BUILD", owpengramBuildCode(OWPENGRAM_BUILD).toString()
             buildConfigField "String", "BETA_URL", "\"" + getProps("BETA_PUBLIC_URL") + "\""
             buildConfigField "boolean", "DEBUG_VERSION", "true"
             buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "false"
@@ -200,7 +200,7 @@ android {
             multiDexEnabled true
             ndk.debugSymbolLevel = 'FULL'
             buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
-            buildConfigField "int", "OWPENGRAM_BUILD", OWPENGRAM_BUILD
+            buildConfigField "int", "OWPENGRAM_BUILD", owpengramBuildCode(OWPENGRAM_BUILD).toString()
             buildConfigField "String", "BETA_URL", "\"" + getProps("BETA_HARDCORE_URL") + "\""
             buildConfigField "boolean", "DEBUG_VERSION", "true"
             buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "true"
@@ -214,7 +214,7 @@ android {
             multiDexEnabled true
             ndk.debugSymbolLevel = 'FULL'
             buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
-            buildConfigField "int", "OWPENGRAM_BUILD", OWPENGRAM_BUILD
+            buildConfigField "int", "OWPENGRAM_BUILD", owpengramBuildCode(OWPENGRAM_BUILD).toString()
             buildConfigField "String", "BETA_URL", "\"\""
             buildConfigField "boolean", "DEBUG_VERSION", "false"
             buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "false"
@@ -228,7 +228,7 @@ android {
             multiDexEnabled true
             ndk.debugSymbolLevel = 'FULL'
             buildConfigField "String", "BUILD_VERSION_STRING", "\"" + APP_VERSION_NAME + "\""
-            buildConfigField "int", "OWPENGRAM_BUILD", OWPENGRAM_BUILD
+            buildConfigField "int", "OWPENGRAM_BUILD", owpengramBuildCode(OWPENGRAM_BUILD).toString()
             buildConfigField "String", "BETA_URL", "\"\""
             buildConfigField "boolean", "DEBUG_VERSION", "false"
             buildConfigField "boolean", "DEBUG_PRIVATE_VERSION", "false"
@@ -240,6 +240,21 @@ android {
     namespace 'org.telegram.messenger'
 }
 
+
+// OwpenGram release: "N" or "N.M" (tag ON / ON.M). The app compares one number,
+// the release code N * 1000 + M, so O10 < O10.1 < O10.2 < O11.
+def owpengramBuildCode(String value) {
+    def match = (value.trim() =~ /^(\d+)(?:\.(\d+))?$/)
+    if (!match.matches()) {
+        throw new GradleException("OWPENGRAM_BUILD must be N or N.M (for example 10 or 10.1), got '${value}'")
+    }
+    def major = match.group(1) as int
+    def minor = match.group(2) ? (match.group(2) as int) : 0
+    if (minor > 999) {
+        throw new GradleException("OWPENGRAM_BUILD minor part must be below 1000, got '${value}'")
+    }
+    return major * 1000 + minor
+}
 
 def getProps(String propName) {
     def propsFile = rootProject.file('local.properties')

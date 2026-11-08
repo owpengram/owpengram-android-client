@@ -25,7 +25,20 @@ public class BuildVars {
     public static boolean CHECK_UPDATES = true;
     public static boolean NO_SCOPED_STORAGE = Build.VERSION.SDK_INT <= 29;
     public static String BUILD_VERSION_STRING = BuildConfig.BUILD_VERSION_STRING;
+    // The OwpenGram release as a code: N * 1000 + M for tag "ON.M" (O10 = 10000,
+    // O10.1 = 10001). 0 is a local dev build. owpengramBuildLabel() shows it.
     public static int OWPENGRAM_BUILD = BuildConfig.OWPENGRAM_BUILD;
+
+    public static int owpengramBuildCode(int major, int minor) {
+        return major * 1000 + minor;
+    }
+
+    /** "10" or "10.1" for a release code. */
+    public static String owpengramBuildLabel(int code) {
+        final int major = code / 1000;
+        final int minor = code % 1000;
+        return minor != 0 ? (major + "." + minor) : String.valueOf(major);
+    }
 
     public static int APP_ID = 3893395;
     public static String APP_HASH = "e2adbe11ee0f092ced6043c4e051fdda";

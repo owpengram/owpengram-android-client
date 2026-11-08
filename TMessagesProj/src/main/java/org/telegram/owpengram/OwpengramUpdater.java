@@ -40,7 +40,8 @@ public final class OwpengramUpdater {
     private static final long PROMPT_INTERVAL_MS = 24L * 60 * 60 * 1000;
     private static final int MAX_RESPONSE_BYTES = 512 * 1024;
     private static final int MAX_NOTES_CHARS = 4000;
-    private static final Pattern TAG = Pattern.compile("^[Oo](\\d+)$");
+    // O10, and minor releases O10.1, O10.2, ...
+    private static final Pattern TAG = Pattern.compile("^[Oo](\\d+)(?:\\.(\\d{1,3}))?$");
 
     private static final String PREFS = "owpengram_updater";
     private static final String KEY_LAST_CHECK = "last_check";
@@ -122,7 +123,7 @@ public final class OwpengramUpdater {
             connection.setConnectTimeout(10_000);
             connection.setReadTimeout(15_000);
             connection.setRequestProperty("Accept", "application/vnd.github+json");
-            connection.setRequestProperty("User-Agent", "OwpenGram-Android/" + BuildVars.OWPENGRAM_BUILD);
+            connection.setRequestProperty("User-Agent", "OwpenGram-Android/" + BuildVars.owpengramBuildLabel(BuildVars.OWPENGRAM_BUILD));
             if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
                 throw new IllegalStateException("GitHub answered " + connection.getResponseCode());
             }
@@ -158,7 +159,10 @@ public final class OwpengramUpdater {
         if (!matcher.matches()) {
             return null;
         }
-        final int build = Integer.parseInt(matcher.group(1));
+        // O10 -> 10000, O10.1 -> 10001: see BuildVars.OWPENGRAM_BUILD
+        final int build = BuildVars.owpengramBuildCode(
+                Integer.parseInt(matcher.group(1)),
+                matcher.group(2) == null ? 0 : Integer.parseInt(matcher.group(2)));
         if (build <= BuildVars.OWPENGRAM_BUILD) {
             return null;
         }
@@ -183,7 +187,7 @@ public final class OwpengramUpdater {
         final TLRPC.TL_help_appUpdate update = new TLRPC.TL_help_appUpdate();
         update.id = build;
         // shown as "Version O8" in the dialog: built from the release number, not copied from the tag text
-        update.version = "O" + build;
+        update.version = "O" + BuildVars.owpengramBuildLabel(build);
         update.text = notes(release.optString("body", ""));
         update.url = url;
         update.flags |= 4; // url

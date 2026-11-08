@@ -260,16 +260,16 @@ try {
     # 0 means a local dev build that never checks for updates.
     if ($env:OWPENGRAM_BUILD) {
         $OwpengramBuild = $env:OWPENGRAM_BUILD
-        if ($OwpengramBuild -notmatch '^\d+$') { throw "OWPENGRAM_BUILD must be a whole number, got '$OwpengramBuild'" }
+        if ($OwpengramBuild -notmatch '^\d+(\.\d+)?$') { throw "OWPENGRAM_BUILD must be N or N.M (e.g. 10 or 10.1), got '$OwpengramBuild'" }
     } else {
         $OwpengramBuild = $null
         do {
-            $answer = (Read-Host '  Release number for this build (the N in tag ON; blank = local dev build, no self-update)').Trim()
+            $answer = (Read-Host '  Release for this build (N or N.M as in tag ON / ON.M, e.g. 10 or 10.1; blank = local dev build, no self-update)').Trim()
             if ([string]::IsNullOrEmpty($answer)) { $answer = '0' }
-            if ($answer -match '^\d+$') {
+            if ($answer -match '^\d+(\.\d+)?$') {
                 $OwpengramBuild = $answer
             } else {
-                Write-Host '  Enter a whole number, or leave blank for a local dev build.' -ForegroundColor Yellow
+                Write-Host '  Enter N or N.M (for example 10 or 10.1), or leave blank for a local dev build.' -ForegroundColor Yellow
             }
         } while ($null -eq $OwpengramBuild)
     }

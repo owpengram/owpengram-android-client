@@ -1009,7 +1009,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             String versionName = pInfo.versionName;
             // OwpenGram release number from the build script (-POWPENGRAM_BUILD=N);
             // 0 is a local dev build.
-            versionName += BuildVars.OWPENGRAM_BUILD > 0 ? "_O" + BuildVars.OWPENGRAM_BUILD : "_dev";
+            versionName += BuildVars.OWPENGRAM_BUILD > 0 ? "_O" + BuildVars.owpengramBuildLabel(BuildVars.OWPENGRAM_BUILD) : "_dev";
 
             return "OwpenGram " + String.format(Locale.US, "v%s (%d)\n%s", versionName, code, abi);
         } catch (Exception e) {
